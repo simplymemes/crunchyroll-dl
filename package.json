@@ -1,7 +1,7 @@
 {
   "name": "crunchyroll-dl",
-  "version": "1.0.0",
-  "description": "Download anime from Crunchyroll",
+  "version": "1.0.1",
+  "description": "A fast, modern, and beautiful Crunchyroll downloader.",
   "main": "index.js",
   "author": "simplymemes",
   "license": "MIT",
@@ -16,5 +16,9 @@
   },
   "bin": {
     "crunchyroll-dl": "index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/simplymemes/crunchyroll-dl.git"
   }
 }
