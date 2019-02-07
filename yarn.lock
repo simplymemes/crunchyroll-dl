@@ -91,6 +91,11 @@ delayed-stream@~1.0.0:
   resolved "https://registry.yarnpkg.com/delayed-stream/-/delayed-stream-1.0.0.tgz#df3ae199acadfb7d440aaae0b29e2272b24ec619"
   integrity sha1-3zrhmayt+31ECqrgsp4icrJOxhk=
 
+dom-walk@^0.1.0:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/dom-walk/-/dom-walk-0.1.1.tgz#672226dc74c8f799ad35307df936aba11acd6018"
+  integrity sha1-ZyIm3HTI95mtNTB9+TaroRrNYBg=
+
 end-of-stream@^1.1.0:
   version "1.4.1"
   resolved "https://registry.yarnpkg.com/end-of-stream/-/end-of-stream-1.4.1.tgz#ed29634d19baba463b6ce6b80a37213eab71ec43"
@@ -154,6 +159,14 @@ get-stream@^4.0.0:
   dependencies:
     pump "^3.0.0"
 
+global@^4.3.2:
+  version "4.3.2"
+  resolved "https://registry.yarnpkg.com/global/-/global-4.3.2.tgz#e76989268a6c74c38908b1305b10fc0e394e9d0f"
+  integrity sha1-52mJJopsdMOJCLEwWxD8DjlOnQ8=
+  dependencies:
+    min-document "^2.19.0"
+    process "~0.5.1"
+
 invert-kv@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/invert-kv/-/invert-kv-2.0.0.tgz#7393f5afa59ec9ff5f67a27620d11c226e3eec02"
@@ -211,6 +224,13 @@ lodash@^4.17.10:
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.11.tgz#b39ea6229ef607ecd89e2c8df12536891cac9b8d"
   integrity sha512-cQKh8igo5QUhZ7lg38DYWAxMvjSAKG0A8wGSVimP07SIUEK2UO+arSRKbRZWtelMtN5V0Hkwh5ryOto/SshYIg==
 
+m3u8-parser@^4.3.0:
+  version "4.3.0"
+  resolved "https://registry.yarnpkg.com/m3u8-parser/-/m3u8-parser-4.3.0.tgz#4b4e988f87b6d8b2401d209a1d17798285a9da04"
+  integrity sha512-bVbjuBMoVIgFL1vpXVIxjeaoB5TPDJRb0m5qiTdM738SGqv/LAmsnVVPlKjM4fulm/rr1XZsKM+owHm+zvqxYA==
+  dependencies:
+    global "^4.3.2"
+
 map-age-cleaner@^0.1.1:
   version "0.1.3"
   resolved "https://registry.yarnpkg.com/map-age-cleaner/-/map-age-cleaner-0.1.3.tgz#7d583a7306434c055fe474b0f45078e6e1b4b92a"
@@ -243,6 +263,13 @@ mimic-fn@^1.0.0:
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/mimic-fn/-/mimic-fn-1.2.0.tgz#820c86a39334640e99516928bd03fca88057d022"
   integrity sha512-jf84uxzwiuiIVKiOLpfYk7N46TSy8ubTonmneY9vrpHNAnp0QBt2BxWV9dO3/j+BoVAb+a5G6YDPW3M5HOdMWQ==
+
+min-document@^2.19.0:
+  version "2.19.0"
+  resolved "https://registry.yarnpkg.com/min-document/-/min-document-2.19.0.tgz#7bd282e3f5842ed295bb748cdd9f1ffa2c824685"
+  integrity sha1-e9KC4/WELtKVu3SM3Z8f+iyCRoU=
+  dependencies:
+    dom-walk "^0.1.0"
 
 ms@2.0.0:
   version "2.0.0"
@@ -326,6 +353,11 @@ path-key@^2.0.0, path-key@^2.0.1:
   resolved "https://registry.yarnpkg.com/path-key/-/path-key-2.0.1.tgz#411cadb574c5a140d3a4b1910d40d80cc9f40b40"
   integrity sha1-QRyttXTFoUDTpLGRDUDYDMn0C0A=
 
+process@~0.5.1:
+  version "0.5.2"
+  resolved "https://registry.yarnpkg.com/process/-/process-0.5.2.tgz#1638d8a8e34c2f440a91db95ab9aeb677fc185cf"
+  integrity sha1-FjjYqONML0QKkduVq5rrZ3/Bhc8=
+
 prompts@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/prompts/-/prompts-2.0.1.tgz#201b3718b4276fb407f037db48c0029d6465245c"
@@ -351,6 +383,13 @@ require-main-filename@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/require-main-filename/-/require-main-filename-1.0.1.tgz#97f717b69d48784f5f526a6c5aa8ffdda055a4d1"
   integrity sha1-l/cXtp1IeE9fUmpsWqj/3aBVpNE=
+
+sanitize-filename@^1.6.1:
+  version "1.6.1"
+  resolved "https://registry.yarnpkg.com/sanitize-filename/-/sanitize-filename-1.6.1.tgz#612da1c96473fa02dccda92dcd5b4ab164a6772a"
+  integrity sha1-YS2hyWRz+gLczaktzVtKsWSmdyo=
+  dependencies:
+    truncate-utf8-bytes "^1.0.0"
 
 semver@^5.5.0:
   version "5.6.0"
@@ -419,6 +458,18 @@ strip-eof@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/strip-eof/-/strip-eof-1.0.0.tgz#bb43ff5598a6eb05d89b59fcd129c983313606bf"
   integrity sha1-u0P/VZim6wXYm1n80SnJgzE2Br8=
+
+truncate-utf8-bytes@^1.0.0:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/truncate-utf8-bytes/-/truncate-utf8-bytes-1.0.2.tgz#405923909592d56f78a5818434b0b78489ca5f2b"
+  integrity sha1-QFkjkJWS1W94pYGENLC3hInKXys=
+  dependencies:
+    utf8-byte-length "^1.0.1"
+
+utf8-byte-length@^1.0.1:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/utf8-byte-length/-/utf8-byte-length-1.0.4.tgz#f45f150c4c66eee968186505ab93fcbb8ad6bf61"
+  integrity sha1-9F8VDExm7uloGGUFq5P8u4rWv2E=
 
 uuid@^3.3.2:
   version "3.3.2"

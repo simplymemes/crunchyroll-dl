@@ -6,7 +6,9 @@ const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
 
+const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
+const m3u8Parser = require('m3u8-parser')
 
 const { info, warn, error } = require('./lib/log')
 const bar = require('./lib/bar')
@@ -82,8 +84,13 @@ const main = async () => {
 
   authed = username && password
 
+  if (unblocked && !authed) {
+    error('You must be logged in to unblock yourself.')
+    process.exit(1)
+  }
+
   // start session
-  const { data: { data: sessionData } } = await instance.get('start_session.0.json', {
+  const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
     params: {
       access_token: 'Scwg9PRRZ19iVwD',
       device_type: 'com.crunchyroll.crunchyroid',
@@ -104,7 +111,7 @@ const main = async () => {
     loginForm.append('locale', baseParams.locale)
     loginForm.append('version', baseParams.version)
 
-    const loginResponse = await instance.post('login.0.json', loginForm, {
+    const loginResponse = await crunchyrollRequest('post', 'login.0.json', loginForm, {
       headers: loginForm.getHeaders()
     })
     
@@ -120,25 +127,30 @@ const main = async () => {
     }
 
     if (unblocked) {
-      const unblockedSession = await axios.get('https://api2.cr-unblocker.com/start_session', {
-        params: {
-          auth: loginResponse.data.data.auth,
-          version: '1.1',
-          user_id: loginResponse.data.data.user.user_id
+      try {
+        const unblockedSession = await axios.get('https://api2.cr-unblocker.com/start_session', {
+          params: {
+            auth: loginResponse.data.data.auth,
+            version: '1.1',
+            user_id: loginResponse.data.data.user.user_id
+          }
+        })
+        
+        if (unblockedSession) {
+          await cleanup(true, false, false) // logout of old session
+          info('Successfully initiated USA Crunchyroll session')
+          sessionId = unblockedSession.data.data.session_id
         }
-      })
-      
-      if (unblockedSession) {
-        await cleanup(true, false, false) // logout of old session
-        info('Successfully initiated USA Crunchyroll session')
-        sessionId = unblockedSession.data.data.session_id
+      } catch (e) {
+        error('Something went wrong when creating an unblocked session.')
+        process.exit(1)
       }
     }
   }
 
   const getEpisode = async (mediaId, epData = null) => {
     info('Attempting to fetch episode...')
-    const episodeStreams = await instance.get('info.0.json', {
+    const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
       params: {
         session_id: sessionId,
         fields: 'media.stream_data,media.media_id',
@@ -156,7 +168,7 @@ const main = async () => {
       // fetch data about the episode if needed
       let episodeData = epData
       if (!episodeData) {
-        let { data: { data: episodeTempData } } = await instance.get('info.0.json', {
+        let { data: { data: episodeTempData } } = await crunchyrollRequest('get', 'info.0.json', {
           params: {
             session_id: sessionId,
             fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.description,media.premium_only',
@@ -181,8 +193,10 @@ const main = async () => {
       }
       let qualityId = Object.keys(qualityMap).find((key) => qualityMap[key] === quality)
 
-      // check for the specified quality
+      // check for the specified quality, if it is specified in the return, it should be in the m3u8...
+      // they appear to all be the same stream now
       let qualityObj = streams.find((stream) => stream.quality === qualityId)
+
       if (quality === 'best') {
         qualityObj = streams[streams.length - 1] // last one
       }
@@ -202,10 +216,29 @@ const main = async () => {
         .replace(':epname', episodeData.name)
         .replace(':ep', episodeData.episode_number || '')
         .replace(':resolution', qualityResolution)
-      output = `${output}.mp4`
+      output = `${sanitize(output)}.mp4`
       info(`Downloading episode as "${output}"`)
 
-      await downloadEpisode(qualityObj, output)
+      // download from the adaptive stream
+      const adaptiveStream = streams[0].url
+
+      const m3u8 = await axios.get(adaptiveStream) // fetch the m3u8
+      const m3u8Data = parsem3u8(m3u8.data)
+
+      if (m3u8Data.playlists.length) {
+        const resolution = Number(qualityResolution.replace('p', '')) // get the actual resolution wanted as a number
+        
+        for (let playlist of m3u8Data.playlists) {
+          // only download the v.vrv.co url
+          if (playlist['attributes']['RESOLUTION']['height'] === resolution && playlist['uri'].startsWith('https://v.vrv.co')) {
+            await downloadEpisode(playlist['uri'], output)
+            return
+          }
+        }
+        warn('The resolution specified was not found.')
+      } else {
+        warn('No streams found.')
+      }
     }
   }
 
@@ -237,7 +270,7 @@ const main = async () => {
     }
 
     // grab the show info
-    const { data: { data: seriesInfo } } = await instance.get('info.0.json', {
+    const { data: { data: seriesInfo } } = await crunchyrollRequest('get', 'info.0.json', {
       params: {
         session_id: sessionId,
         series_id: seriesId,
@@ -248,7 +281,7 @@ const main = async () => {
     })
 
     // grab the collections for the show
-    const { data: { data: collections } } = await instance.get('list_collections.0.json', {
+    const { data: { data: collections } } = await crunchyrollRequest('get', 'list_collections.0.json', {
       params: {
         session_id: sessionId,
         series_id: seriesId,
@@ -270,7 +303,7 @@ const main = async () => {
     for (let collection of selectedCollections) {
       const collectionName = collections.find((col) => col.collection_id === collection).name
 
-      let { data: { data: collectionMedia } } = await instance.get('list_media.0.json', {
+      let { data: { data: collectionMedia } } = await crunchyrollRequest('get', 'list_media.0.json', {
         params: {
           session_id: sessionId,
           collection_id: collection,
@@ -303,7 +336,7 @@ const cleanup = async (logout = true, exit = true, log = true) => {
     logoutForm.append('locale', baseParams.locale)
     logoutForm.append('version', baseParams.version)
 
-    await instance.post('logout.0.json', logoutForm, {
+    await crunchyrollRequest('post', 'logout.0.json', logoutForm, {
       headers: logoutForm.getHeaders()
     })
   }
@@ -316,7 +349,24 @@ process.on('SIGINT', async () => {
   await cleanup()
 })
 
-const downloadEpisode = ({ url }, output) => {
+const crunchyrollRequest = async (method, ...args) => {
+  try {
+    return await instance[method](...args)
+  } catch (e) {
+    error('Something went wrong when contacting Crunchyroll. They may be down.')
+    process.exit(1)
+  }
+}
+
+const parsem3u8 = (manifest) => {
+  let parser = new m3u8Parser.Parser()
+
+  parser.push(manifest)
+  parser.end()
+  return parser.manifest
+}
+
+const downloadEpisode = (url, output) => {
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
@@ -334,7 +384,6 @@ const downloadEpisode = ({ url }, output) => {
         resolve()
       })
       .outputOptions('-c copy')
-      .outputOptions('-bsf:a aac_adtstoasc')
       .output(output)
       .run()
   })
