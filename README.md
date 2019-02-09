@@ -36,7 +36,7 @@ This uses the Crunchyroll Mobile API to download the videos with the subtitles h
 
 **Downloading**
 - `--input`, `-i` (required) the episode/series to download
-- `--language`, `-l` the language to download (default: `enUS`)
+- `--language`, `-l` the language to download (default: `enUS`, see below for other options)
 - `--quality`, `-q` the quality/resolution to download (default: `best`)
 - `--output`, `-o` the output file name (default: `:name Episode :ep [:resolution]`)
   - can use components to customize
@@ -47,8 +47,24 @@ This uses the Crunchyroll Mobile API to download the videos with the subtitles h
 
 **Help**
 - `--help`, `-h` help
+- `--version`, version
+- `--debug`, debug information
 
 ## Examples
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia/episode-1-izuku-midoriya-origin-730707 -u username -p password --unblocked -o ":epname [:resolution]"`
 
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia`
+
+### Languages
+The possible languages are as follows, the default is `enUS`
+
+`enUS` - English (US)\
+`enGB` - English (UK)\
+`esLA` - Español\
+`esES` - Español (España)\
+`ptBR` - Português (Brasil)\
+`ptPT` - Português (Portugal)\
+`frFR` - Français (France)\
+`deDE` - Deutsch\
+`itIT` - Italiano\
+`ruRU` - Русский

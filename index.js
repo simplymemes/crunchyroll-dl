@@ -10,7 +10,7 @@ const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
 const m3u8Parser = require('m3u8-parser')
 
-const { info, warn, error } = require('./lib/log')
+const { info, warn, error, debug: logDebug } = require('./lib/log')
 const bar = require('./lib/bar')
 
 let argv = yargs
@@ -32,6 +32,7 @@ let argv = yargs
   .alias('q', 'quality')
 
   .describe('language', 'The language of the episode subtitles')
+  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU'])
   .default('language', 'enUS')
   .alias('l', 'language')
 
@@ -43,6 +44,9 @@ let argv = yargs
   .describe('unblocked', 'Use the USA library of Crunchyroll')
   .boolean('unblocked')
 
+  .describe('debug', 'Prints debug information to the log')
+  .boolean('debug')
+
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -50,12 +54,15 @@ let argv = yargs
 
   .demandOption(['input'], 'Please specify an input')
   .help()
-  .version(false)
+  .version(true)
   .argv
 
 let sessionId = null
+let expires = new Date()
 let authed = false
 let premium = false
+
+const { input, username, password, quality, unblocked, language, debug } = argv
 
 // instance for further crunchyroll requests
 const instance = axios.create({
@@ -64,13 +71,11 @@ const instance = axios.create({
 
 // some default params
 const baseParams = {
-  locale: 'enUS',
+  locale: language,
   version: '2.1.6'
 }
 
 const main = async () => {
-  const { input, username, password, language, quality, unblocked } = argv
-
   // source from https://github.com/Xonshiz/anime-dl/blob/master/anime_dl/sites/crunchyroll.py#L40-L41
   const seriesRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.com\/([\w\-]+))\/?(?:\?|$)/
   const episodeRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.(?:com|fr)\/(?:media(?:-|\/\?id=)|[^/]*\/[^/?&]*?)([0-9]+))(?:[/?&]|$)/
@@ -121,6 +126,8 @@ const main = async () => {
     }
     info('Successfully logged in!')
 
+    expires = new Date(loginResponse.data.data.expires)
+
     if (loginResponse.data.data.user.premium.includes('anime')) {
       info('Logged in with a premium account.')
       premium = true
@@ -140,11 +147,19 @@ const main = async () => {
           await cleanup(true, false, false) // logout of old session
           info('Successfully initiated USA Crunchyroll session')
           sessionId = unblockedSession.data.data.session_id
+          expires = new Date(unblockedSession.data.data.expires)
         }
       } catch (e) {
+        if (debug) {
+          logDebug(`Error: ${e.response}`)
+        }
         error('Something went wrong when creating an unblocked session.')
         process.exit(1)
       }
+    }
+
+    if (debug) {
+      logDebug(`Current session expires on ${expires}`)
     }
   }
 
@@ -164,6 +179,10 @@ const main = async () => {
       error(episodeStreams.data.message)
     } else {
       const streams = episodeStreams.data.data.stream_data.streams
+
+      if (debug) {
+        logDebug(`Found ${streams.length} streams`)
+      }
 
       // fetch data about the episode if needed
       let episodeData = epData
@@ -222,6 +241,10 @@ const main = async () => {
       // download from the adaptive stream
       const adaptiveStream = streams[0].url
 
+      if (debug) {
+        logDebug(`Fetching m3u8 from: ${adaptiveStream}`)
+      }
+
       const m3u8 = await axios.get(adaptiveStream) // fetch the m3u8
       const m3u8Data = parsem3u8(m3u8.data)
 
@@ -229,15 +252,17 @@ const main = async () => {
         const resolution = Number(qualityResolution.replace('p', '')) // get the actual resolution wanted as a number
         
         for (let playlist of m3u8Data.playlists) {
-          // only download the v.vrv.co url
-          if (playlist['attributes']['RESOLUTION']['height'] === resolution && playlist['uri'].startsWith('https://v.vrv.co')) {
+          if (playlist['attributes']['RESOLUTION']['height'] === resolution) {
+            if (debug) {
+              logDebug(`Downloading stream from: ${playlist['uri']}`)
+            }
             await downloadEpisode(playlist['uri'], output)
             return
           }
         }
-        warn('The resolution specified was not found.')
+        warn('The resolution specified was not found')
       } else {
-        warn('No streams found.')
+        warn('No streams found')
       }
     }
   }
@@ -256,6 +281,9 @@ const main = async () => {
     // grab the page
     let page = null
     try {
+      if (debug) {
+        logDebug(`Attempting to fetch ${input}`)
+      }
       page = await axios.get(input)
     } catch (e) {
       error(`Error fetching series: ${e.message || 'Something went wrong'}`)
@@ -348,11 +376,17 @@ const cleanup = async (logout = true, exit = true, log = true) => {
 process.on('SIGINT', async () => {
   await cleanup()
 })
+process.on('exit', async () => {
+  await cleanup()
+})
 
 const crunchyrollRequest = async (method, ...args) => {
   try {
     return await instance[method](...args)
   } catch (e) {
+    if (debug) {
+      logDebug(`Error: ${e.response}`)
+    }
     error('Something went wrong when contacting Crunchyroll. They may be down.')
     process.exit(1)
   }
