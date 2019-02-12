@@ -13,6 +13,8 @@ const m3u8Parser = require('m3u8-parser')
 const { info, warn, error, debug: logDebug } = require('./lib/log')
 const bar = require('./lib/bar')
 
+const { version } = require('./package.json')
+
 let argv = yargs
   .usage('Usage: $0 [options]')
 
@@ -76,6 +78,8 @@ const baseParams = {
 }
 
 const main = async () => {
+  info(`crunchyroll-dl v${version}`)
+
   // source from https://github.com/Xonshiz/anime-dl/blob/master/anime_dl/sites/crunchyroll.py#L40-L41
   const seriesRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.com\/([\w\-]+))\/?(?:\?|$)/
   const episodeRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.(?:com|fr)\/(?:media(?:-|\/\?id=)|[^/]*\/[^/?&]*?)([0-9]+))(?:[/?&]|$)/
@@ -89,22 +93,39 @@ const main = async () => {
 
   authed = username && password
 
-  if (unblocked && !authed) {
-    error('You must be logged in to unblock yourself.')
-    process.exit(1)
-  }
+  // start session, either unblocked or blocked
+  if (unblocked) {
+    try {
+      const { data: { data: unblockedSessionData } } = await axios.get('https://api2.cr-unblocker.com/start_session', {
+        params: {
+          device_id: uuid(),
+          version: '1.1'
+        }
+      })
 
-  // start session
-  const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
-    params: {
-      access_token: 'Scwg9PRRZ19iVwD',
-      device_type: 'com.crunchyroll.crunchyroid',
-      device_id: uuid(),
-      ...baseParams
+      if (unblockedSessionData) {
+        sessionId = unblockedSessionData.session_id
+        info('Successfully initiated USA Crunchyroll session')
+      }
+    } catch (e) {
+      if (debug) {
+        logDebug(`Error: ${e.response}`)
+      }
+      error('Something went wrong when creating an unblocked session.')
+      process.exit(1)
     }
-  })
-
-  sessionId = sessionData.session_id
+  } else {
+    const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
+      params: {
+        access_token: 'Scwg9PRRZ19iVwD',
+        device_type: 'com.crunchyroll.crunchyroid',
+        device_id: uuid(),
+        ...baseParams
+      }
+    })
+  
+    sessionId = sessionData.session_id
+  }
     
   if (authed) {
     info('Attempting to login...')
@@ -131,31 +152,6 @@ const main = async () => {
     if (loginResponse.data.data.user.premium.includes('anime')) {
       info('Logged in with a premium account.')
       premium = true
-    }
-
-    if (unblocked) {
-      try {
-        const unblockedSession = await axios.get('https://api2.cr-unblocker.com/start_session', {
-          params: {
-            auth: loginResponse.data.data.auth,
-            version: '1.1',
-            user_id: loginResponse.data.data.user.user_id
-          }
-        })
-        
-        if (unblockedSession) {
-          await cleanup(true, false, false) // logout of old session
-          info('Successfully initiated USA Crunchyroll session')
-          sessionId = unblockedSession.data.data.session_id
-          expires = new Date(unblockedSession.data.data.expires)
-        }
-      } catch (e) {
-        if (debug) {
-          logDebug(`Error: ${e.response}`)
-        }
-        error('Something went wrong when creating an unblocked session.')
-        process.exit(1)
-      }
     }
 
     if (debug) {
@@ -276,7 +272,6 @@ const main = async () => {
 
   if (series) {
     info('Attempting to fetch series...')
-    let match = input.match(seriesRegex)
     
     // grab the page
     let page = null
@@ -294,19 +289,8 @@ const main = async () => {
     const seriesId = page.data.match(idDivRegex)[1]
     if (!seriesId) {
       error('Series not found')
-      await cleanup()
+      process.exit(1)
     }
-
-    // grab the show info
-    const { data: { data: seriesInfo } } = await crunchyrollRequest('get', 'info.0.json', {
-      params: {
-        session_id: sessionId,
-        series_id: seriesId,
-        fields: 'series.series_id,series.name,series.description,series.media_count',
-        locale: language,
-        ...baseParams
-      }
-    })
 
     // grab the collections for the show
     const { data: { data: collections } } = await crunchyrollRequest('get', 'list_collections.0.json', {
@@ -317,6 +301,11 @@ const main = async () => {
         offset: 0
       }
     })
+
+    if (!collections.length) {
+      error('No collections found! This show may be blocked in your area.')
+      process.exit(1)
+    }
 
     let choices = collections.map((collection) => ({title: collection.name, value: collection.collection_id}))
 
