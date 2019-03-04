@@ -56,7 +56,7 @@ let argv = yargs
 
   .demandOption(['input'], 'Please specify an input')
   .help()
-  .version(true)
+  .version()
   .argv
 
 let sessionId = null
@@ -80,9 +80,9 @@ const baseParams = {
 const main = async () => {
   info(`crunchyroll-dl v${version}`)
 
-  // source from https://github.com/Xonshiz/anime-dl/blob/master/anime_dl/sites/crunchyroll.py#L40-L41
-  const seriesRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.com\/([\w\-]+))\/?(?:\?|$)/
-  const episodeRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.(?:com|fr)\/(?:media(?:-|\/\?id=)|[^/]*\/[^/?&]*?)([0-9]+))(?:[/?&]|$)/
+  // adapted from https://github.com/Xonshiz/anime-dl/blob/master/anime_dl/sites/crunchyroll.py#L50-L51
+  const seriesRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.com(\/[a-z]{2}|\/[a-z]{2}-[a-z]{2})?\/([\w\-]+))\/?(?:\?|$)/
+  const episodeRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.(?:com|fr)(\/[a-z]{2}|\/[a-z]{2}-[a-z]{2})?\/(?:media(?:-|\/\?id=)|[^/]*\/[^/?&]*?)([0-9]+))(?:[/?&]|$)/
 
   let series = seriesRegex.test(input)
   let episode = episodeRegex.test(input)
@@ -265,7 +265,7 @@ const main = async () => {
 
   if (episode) {
     let match = input.match(episodeRegex)
-    let mediaId = match[3] // the match group
+    let mediaId = match[4] // the match group
 
     await getEpisode(mediaId)
   }
@@ -282,6 +282,9 @@ const main = async () => {
       page = await axios.get(input)
     } catch (e) {
       error(`Error fetching series: ${e.message || 'Something went wrong'}`)
+      if (e.response.status === 503) {
+        error('Crunchyroll appears to be down.')
+      }
       await cleanup()
     }
     const idDivRegex = /<div class="show-actions" group_id="(.*)"><\/div>/ // search for a div with an id
