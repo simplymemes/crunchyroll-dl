@@ -5,6 +5,7 @@ const prompts = require('prompts')
 const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
+const cloudscraper = require('cloudscraper')
 
 const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
@@ -272,6 +273,18 @@ const main = async () => {
 
   if (series) {
     info('Attempting to fetch series...')
+
+    const cloudflareBypass = (url) => {
+      return new Promise((resolve, reject) => {
+        cloudscraper.get(url, (err, res, body) => {
+          if (!err) {
+            resolve(body)
+          } else {
+            reject(err)
+          }
+        })
+      })
+    }
     
     // grab the page
     let page = null
@@ -279,24 +292,31 @@ const main = async () => {
       if (debug) {
         logDebug(`Attempting to fetch ${input}`)
       }
-      page = await axios.get(input)
+
+      let url = input
+      // remove any trailing / if there are any
+      if (url[url.length - 1] === '/') url = url.substring(0, input.length - 1)
+      // skip any maturity walls if there are any...
+      url += '?skip_wall=1'
+
+      page = await cloudflareBypass(url)
     } catch (e) {
       error(`Error fetching series: ${e.message || 'Something went wrong'}`)
-      if (e.response.status === 503) {
-        error('Crunchyroll appears to be down.')
+      if (e.errorType === 1) {
+        error('Cannot solve CAPTCHA automatically! Please try again later.')
       }
       await cleanup()
     }
     const idDivRegex = /<div class="show-actions" group_id="(.*)"><\/div>/ // search for a div with an id
 
-    const seriesId = page.data.match(idDivRegex)[1]
+    const seriesId = page.match(idDivRegex)[1]
     if (!seriesId) {
       error('Series not found')
       process.exit(1)
     }
 
     // grab the collections for the show
-    const { data: { data: collections } } = await crunchyrollRequest('get', 'list_collections.0.json', {
+    const { data: { data: collections }, data: testData } = await crunchyrollRequest('get', 'list_collections.0.json', {
       params: {
         session_id: sessionId,
         series_id: seriesId,
@@ -305,8 +325,11 @@ const main = async () => {
       }
     })
 
-    if (!collections.length) {
-      error('No collections found! This show may be blocked in your area.')
+    if (!collections || !collections.length) {
+      error('No collections found! This series may be blocked in your area.')
+      if (!authed) {
+        error('This series may also be for mature audiences! Try logging in with an account with mature content enabled.')
+      }
       process.exit(1)
     }
 
@@ -359,6 +382,7 @@ const cleanup = async (logout = true, exit = true, log = true) => {
     await crunchyrollRequest('post', 'logout.0.json', logoutForm, {
       headers: logoutForm.getHeaders()
     })
+    authed = false
   }
   if (exit) {
     process.exit(1)
