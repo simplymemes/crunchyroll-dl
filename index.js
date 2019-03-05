@@ -295,7 +295,7 @@ const main = async () => {
 
       let url = input
       // remove any trailing / if there are any
-      if (url[url.length - 1] === '/') url = url.substring(0, input.length - 1)
+      if (url[url.length - 1] === '/') url = url.substring(0, url.length - 1)
       // skip any maturity walls if there are any...
       url += '?skip_wall=1'
 
@@ -316,7 +316,7 @@ const main = async () => {
     }
 
     // grab the collections for the show
-    const { data: { data: collections }, data: testData } = await crunchyrollRequest('get', 'list_collections.0.json', {
+    const { data: { data: collections } } = await crunchyrollRequest('get', 'list_collections.0.json', {
       params: {
         session_id: sessionId,
         series_id: seriesId,
