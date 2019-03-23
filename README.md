@@ -67,4 +67,5 @@ The possible languages are as follows, the default is `enUS`
 `frFR` - Français (France)\
 `deDE` - Deutsch\
 `itIT` - Italiano\
-`ruRU` - Русский
+`ruRU` - Русский\
+`arME` - العربية

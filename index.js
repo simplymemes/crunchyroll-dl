@@ -35,7 +35,7 @@ let argv = yargs
   .alias('q', 'quality')
 
   .describe('language', 'The language of the episode subtitles')
-  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU'])
+  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME'])
   .default('language', 'enUS')
   .alias('l', 'language')
 
