@@ -29,9 +29,9 @@ let argv = yargs
   .describe('input', 'The URL for the Crunchyroll show')
   .alias('i', 'input')
 
-  .describe('quality', 'The quality of the stream')
-  .choices('quality', ['240p', '480p', '720p', '1080p', 'best'])
-  .default('quality', 'best', 'The best quality')
+  .describe('quality', 'The quality of the stream. Will choose what is specified, or the next best quality.')
+  .choices('quality', ['240p', '360p', '480p', '720p', '1080p', 'auto'])
+  .default('quality', 'auto', 'Automatically choose the quality')
   .alias('q', 'quality')
 
   .describe('language', 'The language of the episode subtitles')
@@ -201,52 +201,57 @@ const main = async () => {
         return
       }
 
-      const qualityMap = {
-        'low': '240p',
-        'mid': '480p',
-        'high': '720p',
-        'ultra': '1080p'
-      }
-      let qualityId = Object.keys(qualityMap).find((key) => qualityMap[key] === quality)
-
-      // check for the specified quality, if it is specified in the return, it should be in the m3u8...
-      // they appear to all be the same stream now
-      let qualityObj = streams.find((stream) => stream.quality === qualityId)
-
-      if (quality === 'best') {
-        qualityObj = streams[streams.length - 1] // last one
+      if (streams.length === 0) {
+        warn('You may not have access to watch this episode')
       }
 
-      if (!qualityObj) {
-        error(`Specified quality not found (${quality})`)
-        if (streams.length === 0) {
-          warn('You may not have access to watch this episode')
-        }
-        return
-      }
-
-      qualityResolution = qualityMap[qualityObj.quality] // get resolution
-
-      let output = argv.output
-        .replace(':name', episodeData.collection_name)
-        .replace(':epname', episodeData.name)
-        .replace(':ep', episodeData.episode_number || '')
-        .replace(':resolution', qualityResolution)
-      output = `${sanitize(output)}.mp4`
-      info(`Downloading episode as "${output}"`)
+      // convert to number, handle auto
+      let qualityResolution = quality.replace('p', '')
+      if (qualityResolution === 'auto') qualityResolution = 1080
+      qualityResolution = Number(qualityResolution)
 
       // download from the adaptive stream
-      const adaptiveStream = streams[0].url
+      const stream = streams[0].url
 
       if (debug) {
-        logDebug(`Fetching m3u8 from: ${adaptiveStream}`)
+        logDebug(`Fetching m3u8 from: ${stream}`)
       }
 
-      const m3u8 = await axios.get(adaptiveStream) // fetch the m3u8
+      const m3u8 = await axios.get(stream) // fetch the m3u8
       const m3u8Data = parsem3u8(m3u8.data)
 
       if (m3u8Data.playlists.length) {
-        const resolution = Number(qualityResolution.replace('p', '')) // get the actual resolution wanted as a number
+        let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
+
+        const qualities = [ 240, 360, 480, 720, 1080 ]
+        let availableResolutions = m3u8Data.playlists
+          .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
+          .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
+          .sort((a, b) => a - b) // sort in decending order
+
+        if (debug) {
+          logDebug(`Available resolutions: ${availableResolutions.join(', ')}`)
+        }
+
+        while (!availableResolutions.includes(resolution) && qualities.indexOf(resolution) > 0) {
+          resolution = qualities[qualities.indexOf(resolution) - 1] // keep get the resolution to the left of the resolution wanted
+        }
+
+        // why this would happen, idk... just in case though
+        if (!availableResolutions.includes(resolution)) {
+          error('Could not find any resolution?!')
+          process.exit(1)
+        }
+
+        if (qualityResolution !== resolution) info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
+
+        let output = argv.output
+          .replace(':name', episodeData.collection_name)
+          .replace(':epname', episodeData.name)
+          .replace(':ep', episodeData.episode_number || '')
+          .replace(':resolution', `${resolution}p`)
+        output = `${sanitize(output)}.mp4`
+        info(`Downloading episode as "${output}"`)
         
         for (let playlist of m3u8Data.playlists) {
           if (playlist['attributes']['RESOLUTION']['height'] === resolution) {

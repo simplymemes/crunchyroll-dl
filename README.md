@@ -37,7 +37,7 @@ This uses the Crunchyroll Mobile API to download the videos with the subtitles h
 **Downloading**
 - `--input`, `-i` (required) the episode/series to download
 - `--language`, `-l` the language to download (default: `enUS`, see below for other options)
-- `--quality`, `-q` the quality/resolution to download (default: `best`)
+- `--quality`, `-q` the quality/resolution to download (default: `auto`)
 - `--output`, `-o` the output file name (default: `:name Episode :ep [:resolution]`)
   - can use components to customize
     - `:name` name of collection

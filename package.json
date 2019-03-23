@@ -1,6 +1,6 @@
 {
   "name": "crunchyroll-dl",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A fast, modern, and beautiful Crunchyroll downloader.",
   "main": "index.js",
   "author": "simplymemes",
