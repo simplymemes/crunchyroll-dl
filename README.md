@@ -11,11 +11,12 @@
 
 A fast, modern, and beautiful Crunchyroll downloader.
 
-This uses the Crunchyroll Mobile API to download the videos with the subtitles hardcoded, thus the outputted files will be in `.mp4`.
+Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and the outputted files will be in `.mp4`.
 
 ## Features
 - Download an entire series or just a single episode
-  - Specify which seasons to download from a series
+  - Specify which seasons to download from a series (or download them all)
+  - Specify which episodes to download
 - Use the USA library of Crunchyroll (unblock)
 - Specify download resolution
 - Custom output of file names
@@ -38,12 +39,20 @@ This uses the Crunchyroll Mobile API to download the videos with the subtitles h
 - `--input`, `-i` (required) the episode/series to download
 - `--language`, `-l` the language to download (default: `enUS`, see below for other options)
 - `--quality`, `-q` the quality/resolution to download (default: `auto`)
+- `--dont-autoselect-quality` don't automatically select quality if requested is not available (i.e. if 1080p was specified and is not available, fail)
+- `--download-all` download all collections (no dialog)
+- `--ignore-dubs` attempt to ignore dubs
+- `--episodes` episode ranges
+  - examples
+    - `--episodes 1-2,12-15,18-20`
+    - `--episodes 1,3,5,7`
 - `--output`, `-o` the output file name (default: `:name Episode :ep [:resolution]`)
   - can use components to customize
     - `:name` name of collection
     - `:epname` name of episode
     - `:resolution` resolution of the video
     - `:ep` the episode number
+    - `:series` the series name
 
 **Help**
 - `--help`, `-h` help
@@ -54,6 +63,8 @@ This uses the Crunchyroll Mobile API to download the videos with the subtitles h
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia/episode-1-izuku-midoriya-origin-730707 -u username -p password --unblocked -o ":epname [:resolution]"`
 
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia`
+
+`crunchyroll-dl -i https://www.crunchyroll.com/rezero-starting-life-in-another-world- --ignore-dubs --download-all --episodes 1A,1B,2-15`
 
 ### Languages
 The possible languages are as follows, the default is `enUS`

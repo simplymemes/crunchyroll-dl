@@ -29,10 +29,22 @@ let argv = yargs
   .describe('input', 'The URL for the Crunchyroll show')
   .alias('i', 'input')
 
-  .describe('quality', 'The quality of the stream. Will choose what is specified, or the next best quality.')
+  .describe('quality', 'The quality of the stream (Will choose what is specified, or the next best quality)')
   .choices('quality', ['240p', '360p', '480p', '720p', '1080p', 'auto'])
   .default('quality', 'auto', 'Automatically choose the quality')
   .alias('q', 'quality')
+
+  .describe('dont-autoselect-quality', 'Don\'t automatically select the quality if the specified one is not available')
+  .boolean('dont-autoselect-quality')
+
+  .describe('download-all', 'Download from all available collections')
+  .boolean('download-all')
+
+  .describe('ignore-dubs', 'Attempt to ignore any dubs for the show')
+  .boolean('ignore-dubs')
+
+  .describe('episodes', 'A range of episodes to download')
+  .default('episodes', 'all')
 
   .describe('language', 'The language of the episode subtitles')
   .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME'])
@@ -65,7 +77,10 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, language, debug } = argv
+const { input, username, password, quality, unblocked, language, debug, episodes: episodeRanges } = argv
+const autoselectQuality = !argv['dont-autoselect-quality']
+const downloadAll = argv['download-all']
+const ignoreDubs = argv['ignore-dubs']
 
 // instance for further crunchyroll requests
 const instance = axios.create({
@@ -184,16 +199,15 @@ const main = async () => {
       // fetch data about the episode if needed
       let episodeData = epData
       if (!episodeData) {
-        let { data: { data: episodeTempData } } = await crunchyrollRequest('get', 'info.0.json', {
+        ({ data: { data: episodeData } } = await crunchyrollRequest('get', 'info.0.json', {
           params: {
             session_id: sessionId,
-            fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.description,media.premium_only',
+            fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only',
             media_id: mediaId,
             locale: language,
             ...baseParams
           }
-        })
-        episodeData = episodeTempData
+        }))
       }
 
       if (episodeData.premium_only && !premium) {
@@ -229,23 +243,31 @@ const main = async () => {
           .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
           .sort((a, b) => a - b) // sort in decending order
 
+        let availableResolutionsString = `Available resolutions: ${availableResolutions.join('p, ')}p`
+
         if (debug) {
-          logDebug(`Available resolutions: ${availableResolutions.join(', ')}`)
+          logDebug(availableResolutionsString)
+        }
+
+        if (!autoselectQuality && !availableResolutions.includes(resolution)) {
+          info(`Could not find resolution (${qualityResolution}p) specified, not falling back`)
+          info(availableResolutionsString)
+          return
         }
 
         while (!availableResolutions.includes(resolution) && qualities.indexOf(resolution) > 0) {
           resolution = qualities[qualities.indexOf(resolution) - 1] // keep get the resolution to the left of the resolution wanted
         }
 
-        // why this would happen, idk... just in case though
         if (!availableResolutions.includes(resolution)) {
           error('Could not find any resolution?!')
-          process.exit(1)
+          return
         }
 
-        if (qualityResolution !== resolution) info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
-
+        if (qualityResolution !== resolution && quality !== 'auto') info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
+        
         let output = argv.output
+          .replace(':series', episodeData.series_name)
           .replace(':name', episodeData.collection_name)
           .replace(':epname', episodeData.name)
           .replace(':ep', episodeData.episode_number || '')
@@ -279,9 +301,9 @@ const main = async () => {
   if (series) {
     info('Attempting to fetch series...')
 
-    const cloudflareBypass = (url) => {
+    const cloudflareBypass = (uri) => {
       return new Promise((resolve, reject) => {
-        cloudscraper.get(url, (err, res, body) => {
+        cloudscraper.get({ uri }, (err, _res, body) => {
           if (!err) {
             resolve(body)
           } else {
@@ -338,32 +360,109 @@ const main = async () => {
       process.exit(1)
     }
 
-    let choices = collections.map((collection) => ({title: collection.name, value: collection.collection_id}))
+    let filteredCollections = collections
+    // attempt to ignore dubs
+    if (ignoreDubs) {
+      const languages = ['RU']
+      filteredCollections = collections.filter((collection) => !(
+        // check if there is (x Dub) or (Dub) there
+        /\((.*)?Dub\)/.test(collection.name) ||
+        // check if it contains a two letter language string, like the ones above
+        languages.find((language) => collection.name.includes(`(${language})`)) !== undefined
+      ))
 
-    const { value: selectedCollections = [] } = await prompts({
-      type: 'multiselect',
-      name: 'value',
-      message: 'Which collections would you like to download?',
-      choices,
-      hint: '- Space to select. Return to submit'
-    })
+      if (debug) {
+        logDebug(`Filtered collections: "${filteredCollections.map((collection) => collection.name).join('"," ')}"`)
+      }
+    }
 
-    for (let collection of selectedCollections) {
-      const collectionName = collections.find((col) => col.collection_id === collection).name
+    let choices = filteredCollections.map((collection) => ({title: collection.name, value: collection.collection_id}))
 
-      let { data: { data: collectionMedia } } = await crunchyrollRequest('get', 'list_media.0.json', {
+    let selectedCollections = []
+
+    if (!downloadAll) {
+      ({ value: selectedCollections = [] } = await prompts({
+        type: 'multiselect',
+        name: 'value',
+        message: 'Which collections would you like to download?',
+        choices,
+        hint: '- Space to select. Return to submit'
+      }))
+    } else {
+      info(`Downloading all collections: "${choices.map(({ title }) => title).join('"," ')}"`)
+      // all of them
+      selectedCollections = choices.map(({ value }) => value)
+    }
+
+    // grab all the collections
+    const collectionDataPromises = selectedCollections.map(async (id) => {
+      let { data: { data: collectionMedia }, data } = await crunchyrollRequest('get', 'list_media.0.json', {
         params: {
           session_id: sessionId,
-          collection_id: collection,
+          collection_id: id,
           limit: 1000,
           offset: 0,
-          fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.description,media.premium_only',
+          fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only',
           ...baseParams
         }
       })
-      info(`Beginning to download "${collectionName}"`)
-      for (let media of collectionMedia) {
-        info(`Downloading episode ${media.episode_number || '(not set)'}, "${media.name}", of "${collectionName}"`)
+      return { name: collectionMedia[0] && collectionMedia[0].collection_name, id, data: collectionMedia }
+    })
+    const collectionData = await Promise.all(collectionDataPromises)
+
+    // conditionally cast if a number
+    const castNumIfNum = (val) => !isNaN(val) ? Number(val) : val
+
+    // concat all the episodes into one neat and tidy array
+    const episodeNumbers = [].concat(...collectionData.map((collection) =>
+      collection.data.map(({ episode_number }) => castNumIfNum(episode_number))
+    ))
+
+    let desiredEpisodeNumbers = episodeRanges.split(',').reduce((acc, val) => {
+      // split by "-"'s
+      const bounds = val.split('-')
+      if (bounds.length === 1) {
+        acc.push(val)
+      } else {
+        // ensure both numbers
+        if (!isNaN(bounds[0]) && !isNaN(bounds[1])) {
+          const min = Number(bounds[0])
+          const max = Number(bounds[1])
+          if (min < max) {
+            for (let i = min; i <= max; i++) acc.push(i)
+          } else {
+            error('Minimum value for episode range must be greater than the max!')
+            process.exit(1)
+          }
+        } else {
+          error('Episode range must be only numbers!')
+          process.exit(1)
+        }
+      }
+      return acc
+    }, [])
+
+    // download everything
+    if (episodeRanges.toLowerCase() === 'all') desiredEpisodeNumbers = episodeNumbers
+
+    // check if all episodes are available, get the subset
+    const allDesiredEpisodesAvailable = desiredEpisodeNumbers.every((num) => episodeNumbers.includes(num))
+    const episodeDiff = desiredEpisodeNumbers.filter((num) => !episodeNumbers.includes(num))
+    
+    if (!allDesiredEpisodesAvailable) {
+      error(`Could not find the following episodes from the collections requested: ${episodeDiff.join(', ')}`)
+      info(`Available episodes: ${episodeNumbers.join(', ')}`)
+      process.exit(1)
+    }
+
+    for (let { name, data } of collectionData) {
+      info(`Beginning to download "${name}"`)
+      for (let media of data) {
+        // don't download unwanted episodes
+        if (!desiredEpisodeNumbers.includes(castNumIfNum(media.episode_number))) {
+          continue
+        }
+        info(`Downloading episode ${media.episode_number || '(not set)'}, "${media.name}", of "${name}"`)
         await getEpisode(media.media_id, media)
       }
     }

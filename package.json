@@ -1,6 +1,6 @@
 {
   "name": "crunchyroll-dl",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "A fast, modern, and beautiful Crunchyroll downloader.",
   "main": "index.js",
   "author": "simplymemes",
@@ -8,14 +8,14 @@
   "dependencies": {
     "ansi-colors": "^3.2.4",
     "axios": "^0.18.0",
-    "cloudscraper": "^2.0.1",
+    "cloudscraper": "^3.3.0",
     "fluent-ffmpeg": "^2.1.2",
     "form-data": "^2.3.3",
     "m3u8-parser": "^4.3.0",
-    "prompts": "^2.0.3",
+    "prompts": "^2.0.4",
     "sanitize-filename": "^1.6.1",
     "uuid": "^3.3.2",
-    "yargs": "^13.2.1"
+    "yargs": "^13.2.2"
   },
   "bin": {
     "crunchyroll-dl": "index.js"
