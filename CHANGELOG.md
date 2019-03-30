@@ -1,3 +1,6 @@
+## 1.3.2
+- Hotfix colour
+
 ## 1.3.1
 - Add `--list`
   - Will list all the collections and episodes selected and quit
