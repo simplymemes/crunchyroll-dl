@@ -40,12 +40,12 @@ Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and th
 - `--language`, `-l` the language to download (default: `enUS`, see below for other options)
 - `--quality`, `-q` the quality/resolution to download (default: `auto`)
 - `--dont-autoselect-quality` don't automatically select quality if requested is not available (i.e. if 1080p was specified and is not available, fail)
-- `--download-all` download all collections (no dialog)
+- `--download-all`, `-a` download all collections (no dialog)
 - `--ignore-dubs` attempt to ignore dubs
-- `--episodes` episode ranges
+- `--episodes`, `-e` episode ranges
   - examples
     - `--episodes 1-2,12-15,18-20`
-    - `--episodes 1,3,5,7`
+    - `-e 1,3,5,7`
 - `--output`, `-o` the output file name (default: `:name Episode :ep [:resolution]`)
   - can use components to customize
     - `:name` name of collection

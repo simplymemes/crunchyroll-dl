@@ -13,6 +13,7 @@ const m3u8Parser = require('m3u8-parser')
 
 const { info, warn, error, debug: logDebug } = require('./lib/log')
 const bar = require('./lib/bar')
+const tree = require('./lib/tree')
 
 const { version } = require('./package.json')
 
@@ -39,12 +40,17 @@ let argv = yargs
 
   .describe('download-all', 'Download from all available collections')
   .boolean('download-all')
+  .alias('a', 'download-all')
 
   .describe('ignore-dubs', 'Attempt to ignore any dubs for the show')
   .boolean('ignore-dubs')
 
   .describe('episodes', 'A range of episodes to download')
   .default('episodes', 'all')
+  .alias('e', 'episodes')
+
+  .describe('list', 'List all episodes and collection from the collection(s), and quit')
+  .boolean('list')
 
   .describe('language', 'The language of the episode subtitles')
   .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME'])
@@ -77,10 +83,11 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, language, debug, episodes: episodeRanges } = argv
+const { input, username, password, quality, unblocked, language, debug, list } = argv
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
+const episodeRanges = argv['episodes'].toString()
 
 // instance for further crunchyroll requests
 const instance = axios.create({
@@ -104,6 +111,11 @@ const main = async () => {
   let episode = episodeRegex.test(input)
   if (!series && !episode) {
     error('Invalid Crunchyroll URL input')
+    process.exit(1)
+  }
+
+  if (list && !series) {
+    error('You can only list the episodes and collections from a series!')
     process.exit(1)
   }
 
@@ -303,9 +315,9 @@ const main = async () => {
 
     const cloudflareBypass = (uri) => {
       return new Promise((resolve, reject) => {
-        cloudscraper.get({ uri }, (err, _res, body) => {
+        cloudscraper.get({ uri }, (err, res) => {
           if (!err) {
-            resolve(body)
+            resolve(res)
           } else {
             reject(err)
           }
@@ -326,7 +338,12 @@ const main = async () => {
       // skip any maturity walls if there are any...
       url += '?skip_wall=1'
 
-      page = await cloudflareBypass(url)
+      let response = await cloudflareBypass(url)
+      if (response.statusCode !== 200) {
+        throw new Error(`Error: Status code ${response.statusCode}`)
+      } else {
+        page = response.body
+      }
     } catch (e) {
       error(`Error fetching series: ${e.message || 'Something went wrong'}`)
       if (e.errorType === 1) {
@@ -410,6 +427,11 @@ const main = async () => {
     })
     const collectionData = await Promise.all(collectionDataPromises)
 
+    if (list) {
+      tree(collectionData)
+      process.exit(1)
+    }
+
     // conditionally cast if a number
     const castNumIfNum = (val) => !isNaN(val) ? Number(val) : val
 
@@ -440,7 +462,7 @@ const main = async () => {
         }
       }
       return acc
-    }, [])
+    }, []).map(castNumIfNum)
 
     // download everything
     if (episodeRanges.toLowerCase() === 'all') desiredEpisodeNumbers = episodeNumbers
