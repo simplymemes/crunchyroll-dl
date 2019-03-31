@@ -1,3 +1,7 @@
+## 1.3.3
+- Allow for `Dubbed` and `Dub` to be ignored
+- Fixed bug with PVs / videos without streams and/or titles
+
 ## 1.3.2
 - Hotfix colour
 

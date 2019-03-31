@@ -229,6 +229,7 @@ const main = async () => {
 
       if (streams.length === 0) {
         warn('You may not have access to watch this episode')
+        return
       }
 
       // convert to number, handle auto
@@ -282,7 +283,7 @@ const main = async () => {
           .replace(':series', episodeData.series_name)
           .replace(':name', episodeData.collection_name)
           .replace(':epname', episodeData.name)
-          .replace(':ep', episodeData.episode_number || '')
+          .replace(':ep', episodeData.episode_number || `(${episodeData.name})`)
           .replace(':resolution', `${resolution}p`)
         output = `${sanitize(output)}.mp4`
         info(`Downloading episode as "${output}"`)
@@ -383,7 +384,7 @@ const main = async () => {
       const languages = ['RU']
       filteredCollections = collections.filter((collection) => !(
         // check if there is (x Dub) or (Dub) there
-        /\((.*)?Dub\)/.test(collection.name) ||
+        /\((.*)?Dub(bed)?\)/.test(collection.name) ||
         // check if it contains a two letter language string, like the ones above
         languages.find((language) => collection.name.includes(`(${language})`)) !== undefined
       ))
@@ -413,10 +414,11 @@ const main = async () => {
 
     // grab all the collections
     const collectionDataPromises = selectedCollections.map(async (id) => {
-      let { data: { data: collectionMedia }, data } = await crunchyrollRequest('get', 'list_media.0.json', {
+      let { data: { data: collectionMedia } } = await crunchyrollRequest('get', 'list_media.0.json', {
         params: {
           session_id: sessionId,
           collection_id: id,
+          include_clips: 0,
           limit: 1000,
           offset: 0,
           fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only',
