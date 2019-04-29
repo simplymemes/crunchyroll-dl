@@ -31,7 +31,7 @@ let argv = yargs
   .alias('i', 'input')
 
   .describe('quality', 'The quality of the stream (Will choose what is specified, or the next best quality)')
-  .choices('quality', ['240p', '360p', '480p', '720p', '1080p', 'auto'])
+  .choices('quality', ['240p', '360p', '480p', '720p', '1072p', '1080p', 'auto'])
   .default('quality', 'auto', 'Automatically choose the quality')
   .alias('q', 'quality')
 
@@ -250,7 +250,7 @@ const main = async () => {
       if (m3u8Data.playlists.length) {
         let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
 
-        const qualities = [ 240, 360, 480, 720, 1080 ]
+        const qualities = [ 240, 360, 480, 720, 1072, 1080 ]
         let availableResolutions = m3u8Data.playlists
           .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
           .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
