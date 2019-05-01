@@ -1,3 +1,8 @@
+## 1.3.4
+- Rely on the resolutions provided by CR rather than a hardcoded array
+- Slight wording changes
+- Update README with `--list`
+
 ## 1.3.3
 - Allow for `Dubbed` and `Dub` to be ignored
 - Fixed bug with PVs / videos without streams and/or titles

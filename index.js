@@ -227,7 +227,7 @@ const main = async () => {
         return
       }
 
-      if (streams.length === 0) {
+      if (streams.length === 0 || !streams[0].url) {
         warn('You may not have access to watch this episode')
         return
       }
@@ -250,7 +250,6 @@ const main = async () => {
       if (m3u8Data.playlists.length) {
         let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
 
-        const qualities = [ 240, 360, 480, 720, 1080 ]
         let availableResolutions = m3u8Data.playlists
           .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
           .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
@@ -268,8 +267,14 @@ const main = async () => {
           return
         }
 
-        while (!availableResolutions.includes(resolution) && qualities.indexOf(resolution) > 0) {
-          resolution = qualities[qualities.indexOf(resolution) - 1] // keep get the resolution to the left of the resolution wanted
+        if (!availableResolutions.includes(resolution)) {
+          for (let i = availableResolutions.length - 1; i >= 0; i--) {
+            // get the highest resolution that is possible, next to the desired
+            if (availableResolutions[i] < resolution) {
+              resolution = availableResolutions[i]
+              break
+            }
+          }
         }
 
         if (!availableResolutions.includes(resolution)) {
@@ -402,12 +407,12 @@ const main = async () => {
       ({ value: selectedCollections = [] } = await prompts({
         type: 'multiselect',
         name: 'value',
-        message: 'Which collections would you like to download?',
+        message: `Which collections would you like to ${list ? 'list' : 'download'}?`,
         choices,
         hint: '- Space to select. Return to submit'
       }))
     } else {
-      info(`Downloading all collections: "${choices.map(({ title }) => title).join('"," ')}"`)
+      info(`${list ? 'Listing' : 'Downloading'} all collections: "${choices.map(({ title }) => title).join('"," ')}"`)
       // all of them
       selectedCollections = choices.map(({ value }) => value)
     }

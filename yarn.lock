@@ -105,12 +105,11 @@ cliui@^4.0.0:
     strip-ansi "^4.0.0"
     wrap-ansi "^2.0.0"
 
-cloudscraper@^3.3.0:
-  version "3.3.0"
-  resolved "https://registry.yarnpkg.com/cloudscraper/-/cloudscraper-3.3.0.tgz#0f512b2b29f71e0895029bdfc81894433597a870"
-  integrity sha512-WbRNxAz+x21Vf08Im3g7jsevekx7svW0bwG1IVgL3CFnESL8qLM2dpjg6jC/X8krMB/WDVGGv/3Fd68+cI14Xw==
+cloudscraper@^4.0.1:
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/cloudscraper/-/cloudscraper-4.0.1.tgz#a780a93b0c8be7abc522cee9e7d853e849f344e7"
+  integrity sha512-nq963BlEWVmG3QsjMrU1GCqkPa6F013SmVVtZx2uwyzQSt8NftzeoaJaJpTaaLKAYfXZnp20CTsQ2HzxmaQJiQ==
   dependencies:
-    request "^2.88.0"
     request-promise "^4.2.4"
 
 code-point-at@^1.0.0:
@@ -433,15 +432,15 @@ mem@^4.0.0:
     mimic-fn "^1.0.0"
     p-is-promise "^1.1.0"
 
+mime-db@1.40.0:
+  version "1.40.0"
+  resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.40.0.tgz#a65057e998db090f732a68f6c276d387d4126c32"
+  integrity sha512-jYdeOMPy9vnxEqFRRo6ZvTZ8d9oPb+k18PKoYNYUe2stVEBPPwsln/qWzdbmaIvnhZ9v2P+CuecK+fpUfsV2mA==
+
 mime-db@~1.37.0:
   version "1.37.0"
   resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.37.0.tgz#0b6a0ce6fdbe9576e25f1f2d2fde8830dc0ad0d8"
   integrity sha512-R3C4db6bgQhlIhPU48fUtdVmKnflq+hRdad7IyKhtFj06VPNVdk2RhiYL3UjQIlso8L+YxAtFkobT0VK+S/ybg==
-
-mime-db@~1.38.0:
-  version "1.38.0"
-  resolved "https://registry.yarnpkg.com/mime-db/-/mime-db-1.38.0.tgz#1a2aab16da9eb167b49c6e4df2d9c68d63d8e2ad"
-  integrity sha512-bqVioMFFzc2awcdJZIzR3HjZFX20QhilVS7hytkKrv7xFAn8bM1gzc/FOX2awLISvWe0PV8ptFKcon+wZ5qYkg==
 
 mime-types@^2.1.12:
   version "2.1.21"
@@ -451,11 +450,11 @@ mime-types@^2.1.12:
     mime-db "~1.37.0"
 
 mime-types@~2.1.19:
-  version "2.1.22"
-  resolved "https://registry.yarnpkg.com/mime-types/-/mime-types-2.1.22.tgz#fe6b355a190926ab7698c9a0556a11199b2199bd"
-  integrity sha512-aGl6TZGnhm/li6F7yx82bJiBZwgiEa4Hf6CNr8YO+r5UHr53tSTYZb102zyU50DOWWKeOv0uQLRL0/9EiKWCog==
+  version "2.1.24"
+  resolved "https://registry.yarnpkg.com/mime-types/-/mime-types-2.1.24.tgz#b6f8d0b3e951efb77dedeca194cff6d16f676f81"
+  integrity sha512-WaFHS3MCl5fapm3oLxU4eYDw77IQM2ACcxQ9RIxfaC3ooc6PFuBMGZZsYpvoXS5D5QTWPieo1jjLdAm3TBP3cQ==
   dependencies:
-    mime-db "~1.38.0"
+    mime-db "1.40.0"
 
 mimic-fn@^1.0.0:
   version "1.2.0"

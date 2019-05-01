@@ -58,6 +58,7 @@ Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and th
 - `--help`, `-h` help
 - `--version`, version
 - `--debug`, debug information
+- `--list`, list the episodes of a series (only works with series, will exit after)
 
 ## Examples
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia/episode-1-izuku-midoriya-origin-730707 -u username -p password --unblocked -o ":epname [:resolution]"`
