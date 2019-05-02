@@ -1,3 +1,10 @@
+## 1.3.5
+- Download without subtitles
+  - `--language=none`
+  - This update add an experimental feature which allows you to download the videos without subtitles
+    - If this goes well and there is ample demand, I will look into adding softsub functionality to this downloader as well!
+- Better automatic quality selection
+
 ## 1.3.4
 - Rely on the resolutions provided by CR rather than a hardcoded array
 - Slight wording changes

@@ -6,6 +6,7 @@ const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
 const cloudscraper = require('cloudscraper')
+const parser = require('xml2json')
 
 const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
@@ -53,7 +54,7 @@ let argv = yargs
   .boolean('list')
 
   .describe('language', 'The language of the episode subtitles')
-  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME'])
+  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME', 'none'])
   .default('language', 'enUS')
   .alias('l', 'language')
 
@@ -189,6 +190,7 @@ const main = async () => {
 
   const getEpisode = async (mediaId, epData = null) => {
     info('Attempting to fetch episode...')
+
     const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
       params: {
         session_id: sessionId,
@@ -214,7 +216,7 @@ const main = async () => {
         ({ data: { data: episodeData } } = await crunchyrollRequest('get', 'info.0.json', {
           params: {
             session_id: sessionId,
-            fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only',
+            fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only,media.url',
             media_id: mediaId,
             locale: language,
             ...baseParams
@@ -234,11 +236,40 @@ const main = async () => {
 
       // convert to number, handle auto
       let qualityResolution = quality.replace('p', '')
-      if (qualityResolution === 'auto') qualityResolution = 1080
-      qualityResolution = Number(qualityResolution)
 
       // download from the adaptive stream
-      const stream = streams[0].url
+      let stream = streams[0].url
+
+      // this, for now, is a small test of the older RPC api to download "languageless" versions
+      // if this works well, I will be sure to implement softsubs :)
+      if (language === 'none') {
+        // fetch in 1080p, read the m3u8 for the other formats
+        const mediaXMLURL =
+          `https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig&media_id=${episodeData.media_id}&video_format=108&video_quality=80&current_page=${episodeData.url}`
+
+        let { data: xmlData } = await axios.get(mediaXMLURL, {
+          headers: {
+            Cookie: `session_id=${sessionId};`
+          }
+        })
+
+        if (xmlData) {
+          let parsed = JSON.parse(parser.toJson(xmlData))
+
+          // get the file
+          if (
+            parsed['config:Config'] &&
+            parsed['config:Config']['default:preload'] &&
+            parsed['config:Config']['default:preload']['stream_info'] &&
+            parsed['config:Config']['default:preload']['stream_info']['file']
+          ) {
+            if (!parsed['config:Config']['default:preload']['subtitles']) {
+              warn('This video still has the subtitles hardcoded!')
+            }
+            stream = parsed['config:Config']['default:preload']['stream_info']['file']
+          }
+        }
+      }
 
       if (debug) {
         logDebug(`Fetching m3u8 from: ${stream}`)
@@ -248,12 +279,16 @@ const main = async () => {
       const m3u8Data = parsem3u8(m3u8.data)
 
       if (m3u8Data.playlists.length) {
-        let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
-
         let availableResolutions = m3u8Data.playlists
           .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
           .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
           .sort((a, b) => a - b) // sort in decending order
+
+        // get the highest one available
+        if (qualityResolution === 'auto') qualityResolution = availableResolutions[availableResolutions.length - 1]
+        qualityResolution = Number(qualityResolution)
+
+        let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
 
         let availableResolutionsString = `Available resolutions: ${availableResolutions.join('p, ')}p`
 
@@ -426,7 +461,7 @@ const main = async () => {
           include_clips: 0,
           limit: 1000,
           offset: 0,
-          fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only',
+          fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only,media.url',
           ...baseParams
         }
       })
