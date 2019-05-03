@@ -6,7 +6,7 @@ const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
 const cloudscraper = require('cloudscraper')
-const parser = require('xml2json')
+const parser = require('fast-xml-parser')
 
 const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
@@ -84,16 +84,23 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, language, debug, list } = argv
+const { input, username, password, quality, unblocked, debug, list } = argv
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
+let language = argv.language
 
 // instance for further crunchyroll requests
 const instance = axios.create({
   baseURL: 'https://api.crunchyroll.com/'
 })
+
+let noSubs = false
+if (language === 'none') {
+  language = 'enUS'
+  noSubs = true
+}
 
 // some default params
 const baseParams = {
@@ -242,7 +249,7 @@ const main = async () => {
 
       // this, for now, is a small test of the older RPC api to download "languageless" versions
       // if this works well, I will be sure to implement softsubs :)
-      if (language === 'none') {
+      if (noSubs) {
         // fetch in 1080p, read the m3u8 for the other formats
         const mediaXMLURL =
           `https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig&media_id=${episodeData.media_id}&video_format=108&video_quality=80&current_page=${episodeData.url}`
@@ -253,8 +260,13 @@ const main = async () => {
           }
         })
 
+        const unescapeHtml = (str) => {
+          const map = {amp: '&', quot: '"', '#039': "'"}
+          return str.replace(/&([^;]+);/g, (m, c) => map[c]|| '')
+        }
+
         if (xmlData) {
-          let parsed = JSON.parse(parser.toJson(xmlData))
+          let parsed = parser.parse(xmlData)
 
           // get the file
           if (
@@ -266,7 +278,7 @@ const main = async () => {
             if (!parsed['config:Config']['default:preload']['subtitles']) {
               warn('This video still has the subtitles hardcoded!')
             }
-            stream = parsed['config:Config']['default:preload']['stream_info']['file']
+            stream = unescapeHtml(parsed['config:Config']['default:preload']['stream_info']['file'])
           }
         }
       }

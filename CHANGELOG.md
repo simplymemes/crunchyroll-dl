@@ -1,3 +1,6 @@
+## 1.3.6
+- Avert compilation error with the dependencies
+
 ## 1.3.5
 - Download without subtitles
   - `--language=none`
