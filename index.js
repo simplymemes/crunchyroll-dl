@@ -70,6 +70,9 @@ let argv = yargs
   .default('subType', 'hard')
   .alias('s', 'subType')
 
+  .describe('vilos', 'Get the streams from the new HTML5 player. Please note that this is not compatible with the ublocked option.')
+  .boolean('vilos')
+
   .describe('tmpDir', 'Temporary file directory')
   .default('tmpDir', `tmp-${Date.now()}/`) // make the directory name unique as to when it was run
 
@@ -99,7 +102,7 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, debug, list, subType, subLangs, tmpDir } = argv
+const { input, username, password, quality, unblocked, debug, list, subType, subLangs, tmpDir, vilos } = argv
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
@@ -110,12 +113,6 @@ let language = argv.language
 const instance = axios.create({
   baseURL: 'https://api.crunchyroll.com/'
 })
-
-let noSubs = false
-if (language === 'none') {
-  language = 'enUS'
-  noSubs = true
-}
 
 // some default params
 const baseParams = {
@@ -134,12 +131,17 @@ const main = async () => {
   let episode = episodeRegex.test(input)
   if (!series && !episode) {
     error('Invalid Crunchyroll URL input')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
   }
 
   if (list && !series) {
     error('You can only list the episodes and collections from a series!')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
+  }
+
+  if (vilos && unblocked) {
+    error('You cannot use the vilos option and be unblocked at the same time!')
+    await cleanup(true, true, true, 1)
   }
 
   authed = username && password
@@ -163,7 +165,7 @@ const main = async () => {
         logDebug(`Error: ${e.response}`)
       }
       error('Something went wrong when creating an unblocked session.')
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
   } else {
     const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
@@ -194,7 +196,7 @@ const main = async () => {
     
     if (loginResponse.data.error) {
       error(loginResponse.data.message)
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
     info('Successfully logged in!')
 
@@ -232,59 +234,85 @@ const main = async () => {
       return
     }
 
+    let vilosData = {}
     let streams = []
     let mediaHandler = null
     let subtitles = null
     const subPath = path.join(tmpDir, `subs-${episodeData.media_id}`)
 
-    if (subType === 'hard') {
-      const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
-        params: {
-          session_id: sessionId,
-          fields: 'media.stream_data,media.media_id',
-          media_id: mediaId,
-          locale: language,
-          ...baseParams
-        }
-      })
-
-      if (episodeStreams.data.error) {
-        error(episodeStreams.data.message)
-        return
-      }
-
-      streams = episodeStreams.data.data.stream_data.streams
-
-      if (debug) {
-        logDebug(`Found ${streams.length} streams`)
-      }
-    } else {
-      const mediaXMLURL = oneLineTrim`
-        https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig
-          &media_id=${episodeData.media_id}
-          &video_format=108
-          &video_quality=80
-          &current_page=${episodeData.url}
-      `
-
-      let { data: xmlData } = await axios.get(mediaXMLURL, {
+    // fetch from the vilos media player
+    if (vilos) {
+      let { data: htmlData } = await axios.get(episodeData.url, {
         headers: {
           Cookie: `session_id=${sessionId};`
         }
       })
 
-      mediaHandler = await getMedia(xmlData)
+      vilosData = JSON.parse(htmlData.match(/vilos\.config\.media = (.*);/)[1])
+      streams = vilosData.streams
+    }
 
-      streams = [{ url: mediaHandler.getStream().getFile() }]
+    let choices = []
+    let availableLanguages = []
+    let selectedLanguages = []
 
-      subtitles = mediaHandler.getSubtitles()
+    if (!vilos) {
+      if (subType === 'hard') {
+        const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
+          params: {
+            session_id: sessionId,
+            fields: 'media.stream_data,media.media_id',
+            media_id: mediaId,
+            locale: language,
+            ...baseParams
+          }
+        })
+  
+        if (episodeStreams.data.error) {
+          error(episodeStreams.data.message)
+          return
+        }
 
-      let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
+        streams = episodeStreams.data.data.stream_data.streams
 
-      const choices = subtitleContent.map((sub) => ({ title: sub.title, value: sub, locale: sub.locale.replace('-', '') }))
-      const availableLanguages = subtitleContent.map((sub) => sub.locale.replace('-', '')) // remove dash
-      let selectedLanguages = []
+        if (debug) {
+          logDebug(`Found ${streams.length} streams`)
+        }
+      } else {
+        const mediaXMLURL = oneLineTrim`
+          https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig
+            &media_id=${episodeData.media_id}
+            &video_format=108
+            &video_quality=80
+            &current_page=${episodeData.url}
+        `
+  
+        let { data: xmlData } = await axios.get(mediaXMLURL, {
+          headers: {
+            Cookie: `session_id=${sessionId};`
+          }
+        })
+  
+        mediaHandler = await getMedia(xmlData)
+        streams = [{ url: mediaHandler.getStream().getFile() }]
+        subtitles = mediaHandler.getSubtitles()
 
+        let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
+
+        choices = subtitleContent.map((sub) => ({ title: sub.title, value: sub, locale: sub.locale.replace('-', '') }))
+        availableLanguages = subtitleContent.map((sub) => sub.locale.replace('-', '')) // remove dash
+      }
+    } else {
+      if (subType === 'hard') {
+        streams = streams.filter((stream) => stream.hardsub_lang === language)
+      } else {
+        streams = streams.filter((stream) => stream.hardsub_lang === null)
+        choices = vilosData.subtitles.map((sub) => ({ title: sub.title, value: { url: sub.url, locale: sub.language, title: sub.title }, locale: sub.language }))
+        availableLanguages = vilosData.subtitles.map((sub) => sub.language)
+      }
+    }
+
+    if (subType === 'soft') {
       if (!subLangs) {
         ({ value: selectedLanguages = [] } = await prompts({
           type: 'multiselect',
@@ -295,11 +323,11 @@ const main = async () => {
         }))
       } else {
         let languages = [...availableLanguages]
-
+  
         // check each language
         if (subLangs !== 'all') {
           subLangs.split(',')
-
+  
           for (let language of languages) {
             if (!availableLanguages.includes(language)) {
               error(`Language "${language}" not available!`)
@@ -307,7 +335,7 @@ const main = async () => {
             }
           }
         }
-
+  
         // quickly convert into the same that prompts would return
         selectedLanguages = choices.filter((choice) => languages.includes(choice.locale)).map((choice) => choice.value)
       }
@@ -316,7 +344,7 @@ const main = async () => {
         warn('No subtitles selected!')
       } else {
         info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
-        subtitles = await downloadSubs(subPath, selectedLanguages)
+        subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
         info('Subtitles downloaded!')
       }
     }
@@ -413,8 +441,6 @@ const main = async () => {
             info('Muxing...')
             await mux(subtitles, tmpOutput, output, debug)
             info(`Successfully downloaded "${output}"`)
-
-            rimraf.sync(tmpDir)
           } else {
             await downloadEpisode(playlist['uri'], output)
           }
@@ -481,7 +507,7 @@ const main = async () => {
     const seriesId = page.match(idDivRegex)[1]
     if (!seriesId) {
       error('Series not found')
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     // grab the collections for the show
@@ -499,7 +525,7 @@ const main = async () => {
       if (!authed) {
         error('This series may also be for mature audiences! Try logging in with an account with mature content enabled.')
       }
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     let filteredCollections = collections
@@ -555,7 +581,7 @@ const main = async () => {
 
     if (list) {
       tree(collectionData)
-      process.exit(1)
+      await(cleanup(true, true, true, 0))
     }
 
     // conditionally cast if a number
@@ -580,11 +606,11 @@ const main = async () => {
             for (let i = min; i <= max; i++) acc.push(i)
           } else {
             error('Minimum value for episode range must be greater than the max!')
-            process.exit(1)
+            cleanup(true, true, true, 1)
           }
         } else {
           error('Episode range must be only numbers!')
-          process.exit(1)
+          cleanup(true, true, true, 1)
         }
       }
       return acc
@@ -600,7 +626,7 @@ const main = async () => {
     if (!allDesiredEpisodesAvailable) {
       error(`Could not find the following episodes from the collections requested: ${episodeDiff.join(', ')}`)
       info(`Available episodes: ${episodeNumbers.join(', ')}`)
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     for (let { name, data } of collectionData) {
@@ -620,7 +646,7 @@ const main = async () => {
   await cleanup()
 }
 
-const cleanup = async (logout = true, exit = true, log = true) => {
+const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => {
   if (authed && logout) {
     if (log) {
       info('Logging out...')
@@ -636,17 +662,20 @@ const cleanup = async (logout = true, exit = true, log = true) => {
     })
     authed = false
   }
+  if (subType === 'soft') {
+    rimraf.sync(tmpDir)
+  }
   if (exit) {
-    process.exit(0)
+    process.exit(exitCode)
   }
 }
 
 process.on('SIGINT', async () => {
   await cleanup()
 })
-process.on('exit', async () => {
-  await cleanup()
-})
+// process.on('exit', async () => {
+//   await cleanup()
+// })
 
 const crunchyrollRequest = async (method, ...args) => {
   try {
@@ -656,7 +685,7 @@ const crunchyrollRequest = async (method, ...args) => {
       logDebug(`Error: ${e.response}`)
     }
     error('Something went wrong when contacting Crunchyroll. They may be down.')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
   }
 }
 
