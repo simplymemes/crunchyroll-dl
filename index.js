@@ -330,7 +330,7 @@ const main = async () => {
   
           for (let language of languages) {
             if (!availableLanguages.includes(language)) {
-              error(`Language "${language}" not available!`)
+              error(`Language "${language}" is not available!`)
               info(`Available subtitle languages: ${availableLanguages.join(', ')}`)
             }
           }
