@@ -70,7 +70,7 @@ let argv = yargs
   .default('subType', 'hard')
   .alias('s', 'subType')
 
-  .describe('vilos', 'Get the streams from the new HTML5 player. Please note that this is not compatible with the ublocked option.')
+  .describe('vilos', 'Get the streams from the new HTML5 player. Please note that this is not compatible with the unblocked option.')
   .boolean('vilos')
 
   .describe('tmpDir', 'Temporary file directory')
@@ -304,9 +304,9 @@ const main = async () => {
       }
     } else {
       if (subType === 'hard') {
-        streams = streams.filter((stream) => stream.hardsub_lang === language)
+        streams = streams.filter((stream) => stream.hardsub_lang === language && stream.format === 'adaptive_hls')
       } else {
-        streams = streams.filter((stream) => stream.hardsub_lang === null)
+        streams = streams.filter((stream) => stream.hardsub_lang === null && stream.format === 'adaptive_hls')
         choices = vilosData.subtitles.map((sub) => ({ title: sub.title, value: { url: sub.url, locale: sub.language, title: sub.title }, locale: sub.language }))
         availableLanguages = vilosData.subtitles.map((sub) => sub.language)
       }
@@ -371,7 +371,7 @@ const main = async () => {
     const m3u8 = await axios.get(stream) // fetch the m3u8
     const m3u8Data = parsem3u8(m3u8.data)
 
-    if (m3u8Data.playlists.length) {
+    if (m3u8Data && m3u8Data.playlists && m3u8Data.playlists.length) {
       let availableResolutions = m3u8Data.playlists
         .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
         .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
