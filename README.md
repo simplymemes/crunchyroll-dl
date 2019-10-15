@@ -69,18 +69,23 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
 
 ## Examples
 Download an episode with a custom file name
+
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia/episode-1-izuku-midoriya-origin-730707 -u username -p password --unblocked -o ":epname [:resolution]"`
 
 Download an entire series
+
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia`
 
 Download all seasons without dubs, and only specific episodes
+
 `crunchyroll-dl -i https://www.crunchyroll.com/rezero-starting-life-in-another-world- --ignore-dubs --download-all --episodes 1A,1B,2-15`
 
 Download an episode with soft subtitles
+
 `crunchyroll-dl -i https://www.crunchyroll.com/demon-slayer-kimetsu-no-yaiba/episode-19-hinokami-786932 -u username -p password -s soft --subLangs enUS`
 
 Download an episode with all available soft subs, leaving the subs and media files alone (no muxing)
+
 `crunchyroll-dl -i https://www.crunchyroll.com/dr-stone/episode-1-stone-world-786941 -u username -p password -s soft --subLangs all --mux=false`
 
 ### Languages

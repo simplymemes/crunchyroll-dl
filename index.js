@@ -345,7 +345,7 @@ const main = async () => {
             }
           }
         } else {
-          subLangs = [...availableLanguages]
+          languages = [...availableLanguages]
         }
   
         // quickly convert into the same that prompts would return
