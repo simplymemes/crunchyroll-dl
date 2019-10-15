@@ -64,6 +64,10 @@ let argv = yargs
   .alias('l', 'language')
 
   .describe('subLangs', 'If downloading soft subs, the languages to download. Same options as for --language. Separated by commas. Can be \'all\'.')
+
+  .describe('mux', 'If using soft subtitles, add them to the video. If disabled, the subs will not be added to the video and will not be cleaned up.')
+  .boolean('mux')
+  .default('mux', true)
   
   .describe('subType', 'The type of subs to download')
   .choices('subType', ['hard', 'soft'])
@@ -108,6 +112,10 @@ const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
 let language = argv.language
+
+let muxSubs = argv.mux
+// disable if no subs
+if (subLangs === 'none' || language === 'none') muxSubs = false
 
 // instance for further crunchyroll requests
 const instance = axios.create({
@@ -312,7 +320,7 @@ const main = async () => {
       }
     }
 
-    if (subType === 'soft') {
+    if (subType === 'soft' && subLangs !== 'none' && language !== 'none') {
       if (!subLangs) {
         ({ value: selectedLanguages = [] } = await prompts({
           type: 'multiselect',
@@ -322,18 +330,22 @@ const main = async () => {
           hint: '- Space to select. Return to submit'
         }))
       } else {
-        let languages = [...availableLanguages]
+        let languages = []
   
         // check each language
         if (subLangs !== 'all') {
-          subLangs.split(',')
+          const desiredLangs = subLangs.split(',')
   
-          for (let language of languages) {
+          for (let language of desiredLangs) {
             if (!availableLanguages.includes(language)) {
               error(`Language "${language}" is not available!`)
               info(`Available subtitle languages: ${availableLanguages.join(', ')}`)
+            } else {
+              languages.push(language)
             }
           }
+        } else {
+          subLangs = [...availableLanguages]
         }
   
         // quickly convert into the same that prompts would return
@@ -438,8 +450,12 @@ const main = async () => {
             const tmpOutput = path.join(tmpOutputDir, output)
 
             await downloadEpisode(playlist['uri'], tmpOutput, false)
-            info('Muxing...')
-            await mux(subtitles, tmpOutput, output, debug)
+            if (muxSubs && subtitles && subtitles.length) {
+              info('Muxing...')
+              await mux(subtitles, tmpOutput, output, debug)
+            } else {
+              info('Skipping mux...')
+            }
             info(`Successfully downloaded "${output}"`)
           } else {
             await downloadEpisode(playlist['uri'], output)
@@ -662,7 +678,7 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
     })
     authed = false
   }
-  if (subType === 'soft') {
+  if (subType === 'soft' && muxSubs) {
     rimraf.sync(tmpDir)
   }
   if (exit) {

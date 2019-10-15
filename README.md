@@ -11,7 +11,7 @@
 
 A fast, modern, and beautiful Crunchyroll downloader.
 
-Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and the outputted files will be in `.mp4`.
+Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed. 
 
 ## Features
 - Download an entire series or just a single episode
@@ -53,6 +53,13 @@ Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and th
     - `:resolution` resolution of the video
     - `:ep` the episode number
     - `:series` the series name
+` `--vilos` fetch the videos/subtitles from the Crunchyroll web page. will not work with the unblocked option.
+
+**Downloading with Softsubs**
+- `--subLangs` which subtitle languages to download. if omitted, will present a list to select from. same options as below for the languages
+  - can be set to `none` to download no subs
+- `--mux` whether to mux the subtitles into the video. if set to `false`, a temporary directory with the subtitles and media files is left in the current directory.
+- `--tmpDir` where to put the media and subtitle files before muxing
 
 **Help**
 - `--help`, `-h` help
@@ -61,11 +68,20 @@ Downloads the Crunchyroll videos with the subtitles hardcoded/hardsubbed, and th
 - `--list`, list the episodes of a series (only works with series, will exit after)
 
 ## Examples
+Download an episode with a custom file name
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia/episode-1-izuku-midoriya-origin-730707 -u username -p password --unblocked -o ":epname [:resolution]"`
 
+Download an entire series
 `crunchyroll-dl -i https://www.crunchyroll.com/my-hero-academia`
 
+Download all seasons without dubs, and only specific episodes
 `crunchyroll-dl -i https://www.crunchyroll.com/rezero-starting-life-in-another-world- --ignore-dubs --download-all --episodes 1A,1B,2-15`
+
+Download an episode with soft subtitles
+`crunchyroll-dl -i https://www.crunchyroll.com/demon-slayer-kimetsu-no-yaiba/episode-19-hinokami-786932 -u username -p password -s soft --subLangs enUS`
+
+Download an episode with all available soft subs, leaving the subs and media files alone (no muxing)
+`crunchyroll-dl -i https://www.crunchyroll.com/dr-stone/episode-1-stone-world-786941 -u username -p password -s soft --subLangs all --mux=false`
 
 ### Languages
 The possible languages are as follows, the default is `enUS`
