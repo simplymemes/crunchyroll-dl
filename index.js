@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const fs = require('fs')
 const path = require('path')
 const yargs = require('yargs')
 const prompts = require('prompts')
@@ -22,6 +23,8 @@ const tree = require('./lib/tree')
 const { getMedia, downloadSubs, mux } = require('./lib/subs')
 
 const { version } = require('./package.json')
+
+const languages = ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME']
 
 let argv = yargs
   .usage('Usage: $0 [options]')
@@ -58,12 +61,9 @@ let argv = yargs
   .describe('list', 'List all episodes and collection from the collection(s), and quit')
   .boolean('list')
 
-  .describe('language', 'The language of the episode subtitles')
-  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME', 'none'])
+  .describe('language', `The language of the episode subtitles. Separated by commas if soft.\n Available: ${languages.join(', ')}, none, all`)
   .default('language', 'enUS')
   .alias('l', 'language')
-
-  .describe('subLangs', 'If downloading soft subs, the languages to download. Same options as for --language. Separated by commas. Can be \'all\'.')
 
   .describe('mux', 'If using soft subtitles, add them to the video. If disabled, the subs will not be added to the video and will not be cleaned up.')
   .boolean('mux')
@@ -73,6 +73,10 @@ let argv = yargs
   .choices('subType', ['hard', 'soft'])
   .default('subType', 'hard')
   .alias('s', 'subType')
+
+  .describe('subsOnly', 'Only download the subtitles. Only valid if downloading soft subs.')
+  .boolean('subsOnly')
+  .default('subsOnly', false)
 
   .describe('vilos', 'Get the streams from the new HTML5 player. Please note that this is not compatible with the unblocked option.')
   .boolean('vilos')
@@ -106,16 +110,38 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, debug, list, subType, subLangs, tmpDir, vilos } = argv
+const { input, username, password, quality, unblocked, debug, list, tmpDir, vilos, subsOnly } = argv
+let subType = argv.subType
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
-let language = argv.language
+const language = argv.language
+let desiredLanguages = language.split(',').map(l => l.trim())
+
+if (language !== 'all' && language !== 'none') {
+  for (let language of desiredLanguages) {
+    if (!languages.includes(language)) {
+      error(`Invalid language: ${language}`)
+      info(`Language can be one of ${languages.join(', ')}`)
+      process.exit(1)
+    }
+  }
+}
+
+if (subsOnly && subType !== 'soft') {
+  info('Changing to soft sub download, to download the subtitles only')
+  subType = 'hard'
+}
 
 let muxSubs = argv.mux
 // disable if no subs
-if (subLangs === 'none' || language === 'none') muxSubs = false
+if (language === 'none') {
+  muxSubs = false
+  if (subType === 'hard') {
+    subType = 'soft'
+  }
+}
 
 // instance for further crunchyroll requests
 const instance = axios.create({
@@ -124,8 +150,8 @@ const instance = axios.create({
 
 // some default params
 const baseParams = {
-  locale: language,
-  version: '2.1.6'
+  locale: desiredLanguages[0],
+  version: '2.6.0'
 }
 
 const main = async () => {
@@ -178,7 +204,7 @@ const main = async () => {
   } else {
     const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
       params: {
-        access_token: 'Scwg9PRRZ19iVwD',
+        access_token: 'WveH9VkPLrXvuNm',
         device_type: 'com.crunchyroll.crunchyroid',
         device_id: uuid(),
         ...baseParams
@@ -320,8 +346,8 @@ const main = async () => {
       }
     }
 
-    if (subType === 'soft' && subLangs !== 'none' && language !== 'none') {
-      if (!subLangs) {
+    if (subType === 'soft' && language !== 'none') {
+      if (!desiredLanguages.length) {
         ({ value: selectedLanguages = [] } = await prompts({
           type: 'multiselect',
           name: 'value',
@@ -333,10 +359,8 @@ const main = async () => {
         let languages = []
   
         // check each language
-        if (subLangs !== 'all') {
-          const desiredLangs = subLangs.split(',')
-  
-          for (let language of desiredLangs) {
+        if (language !== 'all') {
+          for (let language of desiredLanguages) {
             if (!availableLanguages.includes(language)) {
               error(`Language "${language}" is not available!`)
               info(`Available subtitle languages: ${availableLanguages.join(', ')}`)
@@ -354,10 +378,19 @@ const main = async () => {
 
       if (selectedLanguages.length === 0) {
         warn('No subtitles selected!')
+        if (subsOnly) {
+          error('No subs to download!')
+          return
+        }
       } else {
         info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
         subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
         info('Subtitles downloaded!')
+
+        if (subsOnly) {
+          info(`Subs only download completed! Find them in the folder ./${subPath}`)
+          return
+        }
       }
     }
 
@@ -441,7 +474,7 @@ const main = async () => {
             logDebug(`Downloading stream from: ${playlist['uri']}`)
           }
 
-          if (subType === 'soft') {
+          if (subType === 'soft' && language !== 'none') {
             const tmpOutputDir = path.join(tmpDir, `media-${episodeData.media_id}`)
 
             // make the folder to download to
@@ -678,7 +711,7 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
     })
     authed = false
   }
-  if (subType === 'soft' && muxSubs) {
+  if (subType === 'soft' && muxSubs && !subsOnly) {
     rimraf.sync(tmpDir)
   }
   if (exit) {
@@ -689,9 +722,6 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
 process.on('SIGINT', async () => {
   await cleanup()
 })
-// process.on('exit', async () => {
-//   await cleanup()
-// })
 
 const crunchyrollRequest = async (method, ...args) => {
   try {

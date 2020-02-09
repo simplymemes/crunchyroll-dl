@@ -56,9 +56,10 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
 ` `--vilos` fetch the videos/subtitles from the Crunchyroll web page. will not work with the unblocked option.
 
 **Downloading with Softsubs**
-- `--subLangs` which subtitle languages to download. if omitted, will present a list to select from. same options as below for the languages
+- `--language` (same as above) which subtitle languages to download. if omitted, will present a list to select from. same options as below for the languages
   - can be set to `none` to download no subs
 - `--mux` whether to mux the subtitles into the video. if set to `false`, a temporary directory with the subtitles and media files is left in the current directory.
+- `--subsOnly` download only the subs, and no video
 - `--tmpDir` where to put the media and subtitle files before muxing
 
 **Help**
@@ -82,11 +83,11 @@ Download all seasons without dubs, and only specific episodes
 
 Download an episode with soft subtitles
 
-`crunchyroll-dl -i https://www.crunchyroll.com/demon-slayer-kimetsu-no-yaiba/episode-19-hinokami-786932 -u username -p password -s soft --subLangs enUS`
+`crunchyroll-dl -i https://www.crunchyroll.com/demon-slayer-kimetsu-no-yaiba/episode-19-hinokami-786932 -u username -p password -s soft --language enUS`
 
 Download an episode with all available soft subs, leaving the subs and media files alone (no muxing)
 
-`crunchyroll-dl -i https://www.crunchyroll.com/dr-stone/episode-1-stone-world-786941 -u username -p password -s soft --subLangs all --mux=false`
+`crunchyroll-dl -i https://www.crunchyroll.com/dr-stone/episode-1-stone-world-786941 -u username -p password -s soft --language all --mux=false`
 
 ### Languages
 The possible languages are as follows, the default is `enUS`

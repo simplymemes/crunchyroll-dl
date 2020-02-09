@@ -1,13 +1,13 @@
 {
   "name": "crunchyroll-dl",
-  "version": "2.0.0-beta.6",
+  "version": "2.0.0-beta.7",
   "description": "A fast, modern, and beautiful Crunchyroll downloader.",
   "main": "index.js",
   "author": "simplymemes",
   "license": "MIT",
   "scripts": {
-    "publish": "npm publish",
-    "publish-beta": "npm publish --tag beta"
+    "run-npm-publish": "npm publish",
+    "run-npm-publish-beta": "npm publish --tag beta"
   },
   "dependencies": {
     "ansi-colors": "^4.1.1",
