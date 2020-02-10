@@ -1,22 +1,30 @@
 #!/usr/bin/env node
 
+const fs = require('fs')
+const path = require('path')
 const yargs = require('yargs')
 const prompts = require('prompts')
 const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
 const cloudscraper = require('cloudscraper')
-const parser = require('fast-xml-parser')
 
 const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
 const m3u8Parser = require('m3u8-parser')
+const mkdirp = require('mkdirp')
+const rimraf = require('rimraf')
+
+const { oneLineTrim } = require('common-tags')
 
 const { info, warn, error, debug: logDebug } = require('./lib/log')
 const bar = require('./lib/bar')
 const tree = require('./lib/tree')
+const { getMedia, downloadSubs, mux } = require('./lib/subs')
 
 const { version } = require('./package.json')
+
+const languages = ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME']
 
 let argv = yargs
   .usage('Usage: $0 [options]')
@@ -53,14 +61,36 @@ let argv = yargs
   .describe('list', 'List all episodes and collection from the collection(s), and quit')
   .boolean('list')
 
-  .describe('language', 'The language of the episode subtitles')
-  .choices('language', ['enUS', 'enGB', 'esLA', 'esES', 'ptBR', 'ptPT', 'frFR', 'deDE', 'itIT', 'ruRU', 'arME', 'none'])
+  .describe('language', `The language of the episode subtitles. Separated by commas if soft.\n Available: ${languages.join(', ')}, none, all`)
   .default('language', 'enUS')
   .alias('l', 'language')
+  
+  .describe('subType', 'The type of subs to download')
+  .choices('subType', ['hard', 'soft'])
+  .default('subType', 'hard')
+  .alias('s', 'subType')
+
+  .describe('subsOnly', 'Only download the subtitles. Only valid if downloading soft subs.')
+  .boolean('subsOnly')
+  .default('subsOnly', false)
+
+  .describe('vilos', 'Get the streams from the new HTML5 player. Please note that this is not compatible with the unblocked option.')
+  .boolean('vilos')
+
+  .describe('tmpDir', 'Temporary file directory')
+  .default('tmpDir', `tmp-${Date.now()}/`) // make the directory name unique as to when it was run
+
+  .describe('noCleanup', 'If enabled, the temporary folder with the subtitles and videos will not be cleaned up.')
+  .boolean('noCleanup')
+  .default('noCleanup', false)
+
+  .describe('mux', 'If using soft subtitles, add them to the video. If disabled, the subs will not be added to the video and will not be cleaned up.')
+  .boolean('mux')
+  .default('mux', true)
 
   // output
   .describe('output', 'The output of the file for the video file')
-  .default('output', ':name Episode :ep [:resolution]')
+  .default('output', ':name Episode :ep [:resolution] [:subType]')
   .alias('o', 'output')
 
   .describe('unblocked', 'Use the USA library of Crunchyroll')
@@ -84,28 +114,57 @@ let expires = new Date()
 let authed = false
 let premium = false
 
-const { input, username, password, quality, unblocked, debug, list } = argv
+const { input, username, password, quality, unblocked, debug, list, tmpDir, vilos, subsOnly } = argv
+let { subType, noCleanup } = argv
+
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
-let language = argv.language
+const language = argv.language
+let desiredLanguages = language.split(',').map(l => l.trim())
+
+if (language !== 'all' && language !== 'none') {
+  for (let language of desiredLanguages) {
+    if (!languages.includes(language)) {
+      error(`Invalid language: ${language}`)
+      info(`Language can be one of ${languages.join(', ')}`)
+      process.exit(1)
+    }
+  }
+}
+
+if (subsOnly && subType !== 'soft') {
+  info('Changing to soft sub download, to download the subtitles only')
+  subType = 'hard'
+}
+
+let muxSubs = argv.mux
+// disable if no subs
+if (language === 'none') {
+  muxSubs = false
+  if (subType === 'hard') {
+    subType = 'soft'
+  }
+}
+
+if (subsOnly) {
+  noCleanup = true
+}
+
+if (!muxSubs) {
+  noCleanup = true
+}
 
 // instance for further crunchyroll requests
 const instance = axios.create({
   baseURL: 'https://api.crunchyroll.com/'
 })
 
-let noSubs = false
-if (language === 'none') {
-  language = 'enUS'
-  noSubs = true
-}
-
 // some default params
 const baseParams = {
-  locale: language,
-  version: '2.1.6'
+  locale: desiredLanguages[0],
+  version: '2.6.0'
 }
 
 const main = async () => {
@@ -119,12 +178,17 @@ const main = async () => {
   let episode = episodeRegex.test(input)
   if (!series && !episode) {
     error('Invalid Crunchyroll URL input')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
   }
 
   if (list && !series) {
     error('You can only list the episodes and collections from a series!')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
+  }
+
+  if (vilos && unblocked) {
+    error('You cannot use the vilos option and be unblocked at the same time!')
+    await cleanup(true, true, true, 1)
   }
 
   authed = username && password
@@ -148,12 +212,12 @@ const main = async () => {
         logDebug(`Error: ${e.response}`)
       }
       error('Something went wrong when creating an unblocked session.')
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
   } else {
     const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
       params: {
-        access_token: 'Scwg9PRRZ19iVwD',
+        access_token: 'WveH9VkPLrXvuNm',
         device_type: 'com.crunchyroll.crunchyroid',
         device_id: uuid(),
         ...baseParams
@@ -179,7 +243,7 @@ const main = async () => {
     
     if (loginResponse.data.error) {
       error(loginResponse.data.message)
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
     info('Successfully logged in!')
 
@@ -198,161 +262,257 @@ const main = async () => {
   const getEpisode = async (mediaId, epData = null) => {
     info('Attempting to fetch episode...')
 
-    const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
-      params: {
-        session_id: sessionId,
-        fields: 'media.stream_data,media.media_id',
-        media_id: mediaId,
-        locale: language,
-        ...baseParams
-      }
-    })
-    
-    if (episodeStreams.data.error) {
-      error(episodeStreams.data.message)
-    } else {
-      const streams = episodeStreams.data.data.stream_data.streams
+    // fetch data about the episode if needed
+    let episodeData = epData
+    if (!episodeData) {
+      ({ data: { data: episodeData } } = await crunchyrollRequest('get', 'info.0.json', {
+        params: {
+          session_id: sessionId,
+          fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only,media.url',
+          media_id: mediaId,
+          locale: language,
+          ...baseParams
+        }
+      }))
+    }
 
-      if (debug) {
-        logDebug(`Found ${streams.length} streams`)
-      }
+    if (episodeData.premium_only && !premium) {
+      warn(`Skipping "${episodeData.name}" due to it being for premium members only. (Ep ${episodeData.episode_number})`)
+      return
+    }
 
-      // fetch data about the episode if needed
-      let episodeData = epData
-      if (!episodeData) {
-        ({ data: { data: episodeData } } = await crunchyrollRequest('get', 'info.0.json', {
+    let vilosData = {}
+    let streams = []
+    let mediaHandler = null
+    let subtitles = null
+    const subPath = path.join(tmpDir, `subs-${episodeData.media_id}`)
+
+    // fetch from the vilos media player
+    if (vilos) {
+      let { data: htmlData } = await axios.get(episodeData.url, {
+        headers: {
+          Cookie: `session_id=${sessionId};`
+        }
+      })
+
+      vilosData = JSON.parse(htmlData.match(/vilos\.config\.media = (.*);/)[1])
+      streams = vilosData.streams
+    }
+
+    let choices = []
+    let availableLanguages = []
+    let selectedLanguages = []
+
+    if (!vilos) {
+      if (subType === 'hard') {
+        const episodeStreams = await crunchyrollRequest('get', 'info.0.json', {
           params: {
             session_id: sessionId,
-            fields: 'media.media_id,media.collection_id,media.collection_name,media.series_id,media.episode_number,media.name,media.series_name,media.description,media.premium_only,media.url',
+            fields: 'media.stream_data,media.media_id',
             media_id: mediaId,
             locale: language,
             ...baseParams
           }
-        }))
-      }
+        })
+  
+        if (episodeStreams.data.error) {
+          error(episodeStreams.data.message)
+          return
+        }
 
-      if (episodeData.premium_only && !premium) {
-        warn(`Skipping "${episodeData.name}" due to it being for premium members only. (Ep ${episodeData.episode_number})`)
-        return
-      }
+        streams = episodeStreams.data.data.stream_data.streams
 
-      if (streams.length === 0 || !streams[0].url) {
-        warn('You may not have access to watch this episode')
-        return
-      }
-
-      // convert to number, handle auto
-      let qualityResolution = quality.replace('p', '')
-
-      // download from the adaptive stream
-      let stream = streams[0].url
-
-      // this, for now, is a small test of the older RPC api to download "languageless" versions
-      // if this works well, I will be sure to implement softsubs :)
-      if (noSubs) {
-        // fetch in 1080p, read the m3u8 for the other formats
-        const mediaXMLURL =
-          `https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig&media_id=${episodeData.media_id}&video_format=108&video_quality=80&current_page=${episodeData.url}`
-
+        if (debug) {
+          logDebug(`Found ${streams.length} streams`)
+        }
+      } else {
+        const mediaXMLURL = oneLineTrim`
+          https://www.crunchyroll.com/xml/?req=RpcApiVideoPlayer_GetStandardConfig
+            &media_id=${episodeData.media_id}
+            &video_format=108
+            &video_quality=80
+            &current_page=${episodeData.url}
+        `
+  
         let { data: xmlData } = await axios.get(mediaXMLURL, {
           headers: {
             Cookie: `session_id=${sessionId};`
           }
         })
+  
+        mediaHandler = await getMedia(xmlData)
+        streams = [{ url: mediaHandler.getStream().getFile() }]
+        subtitles = mediaHandler.getSubtitles()
 
-        const unescapeHtml = (str) => {
-          const map = {amp: '&', quot: '"', '#039': "'"}
-          return str.replace(/&([^;]+);/g, (m, c) => map[c]|| '')
-        }
+        let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
 
-        if (xmlData) {
-          let parsed = parser.parse(xmlData)
+        choices = subtitleContent.map((sub) => ({ title: sub.title, value: sub, locale: sub.locale.replace('-', '') }))
+        availableLanguages = subtitleContent.map((sub) => sub.locale.replace('-', '')) // remove dash
+      }
+    } else {
+      if (subType === 'hard') {
+        streams = streams.filter((stream) => stream.hardsub_lang === language && stream.format === 'adaptive_hls')
+      } else {
+        streams = streams.filter((stream) => stream.hardsub_lang === null && stream.format === 'adaptive_hls')
+        choices = vilosData.subtitles.map((sub) => ({ title: sub.title, value: { url: sub.url, locale: sub.language, title: sub.title }, locale: sub.language }))
+        availableLanguages = vilosData.subtitles.map((sub) => sub.language)
+      }
+    }
 
-          // get the file
-          if (
-            parsed['config:Config'] &&
-            parsed['config:Config']['default:preload'] &&
-            parsed['config:Config']['default:preload']['stream_info'] &&
-            parsed['config:Config']['default:preload']['stream_info']['file']
-          ) {
-            if (!parsed['config:Config']['default:preload']['subtitles']) {
-              warn('This video still has the subtitles hardcoded!')
+    if (subType === 'soft' && language !== 'none') {
+      if (!desiredLanguages.length) {
+        ({ value: selectedLanguages = [] } = await prompts({
+          type: 'multiselect',
+          name: 'value',
+          message: 'Which subtitle languages would you like to download?',
+          choices,
+          hint: '- Space to select. Return to submit'
+        }))
+      } else {
+        let languages = []
+  
+        // check each language
+        if (language !== 'all') {
+          for (let language of desiredLanguages) {
+            if (!availableLanguages.includes(language)) {
+              error(`Language "${language}" is not available!`)
+              info(`Available subtitle languages: ${availableLanguages.join(', ')}`)
+            } else {
+              languages.push(language)
             }
-            stream = unescapeHtml(parsed['config:Config']['default:preload']['stream_info']['file'])
           }
+        } else {
+          languages = [...availableLanguages]
+        }
+  
+        // quickly convert into the same that prompts would return
+        selectedLanguages = choices.filter((choice) => languages.includes(choice.locale)).map((choice) => choice.value)
+      }
+
+      if (selectedLanguages.length === 0) {
+        warn('No subtitles selected!')
+        if (subsOnly) {
+          error('No subs to download!')
+          return
+        }
+      } else {
+        info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
+        subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
+        info('Subtitles downloaded!')
+
+        if (subsOnly) {
+          info(`Subs only download completed! Find them in the folder ./${subPath}`)
+          return
         }
       }
+    }
+
+    if (debug) {
+      logDebug(`Subtitle information: ${JSON.stringify(subtitles)}`)
+    }
+
+    if (streams.length === 0 || !streams[0].url) {
+      warn('You may not have access to watch this episode')
+      return
+    }
+
+    // convert to number, handle auto
+    let qualityResolution = quality.replace('p', '')
+
+    // download from the adaptive stream
+    let stream = streams[0].url
+
+    if (debug) {
+      logDebug(`Fetching m3u8 from: ${stream}`)
+    }
+
+    const m3u8 = await axios.get(stream) // fetch the m3u8
+    const m3u8Data = parsem3u8(m3u8.data)
+
+    if (m3u8Data && m3u8Data.playlists && m3u8Data.playlists.length) {
+      let availableResolutions = m3u8Data.playlists
+        .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
+        .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
+        .sort((a, b) => a - b) // sort in decending order
+
+      // get the highest one available
+      if (qualityResolution === 'auto') qualityResolution = availableResolutions[availableResolutions.length - 1]
+      qualityResolution = Number(qualityResolution)
+
+      let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
+
+      let availableResolutionsString = `Available resolutions: ${availableResolutions.join('p, ')}p`
 
       if (debug) {
-        logDebug(`Fetching m3u8 from: ${stream}`)
+        logDebug(availableResolutionsString)
       }
 
-      const m3u8 = await axios.get(stream) // fetch the m3u8
-      const m3u8Data = parsem3u8(m3u8.data)
+      if (!autoselectQuality && !availableResolutions.includes(resolution)) {
+        info(`Could not find resolution (${qualityResolution}p) specified, not falling back`)
+        info(availableResolutionsString)
+        return
+      }
 
-      if (m3u8Data.playlists.length) {
-        let availableResolutions = m3u8Data.playlists
-          .map((playlist) => playlist['attributes']['RESOLUTION']['height'])
-          .filter((value, index, arr) => index === arr.indexOf(value)) // remove dupes
-          .sort((a, b) => a - b) // sort in decending order
-
-        // get the highest one available
-        if (qualityResolution === 'auto') qualityResolution = availableResolutions[availableResolutions.length - 1]
-        qualityResolution = Number(qualityResolution)
-
-        let resolution = Number(qualityResolution) // get the actual resolution wanted as a number
-
-        let availableResolutionsString = `Available resolutions: ${availableResolutions.join('p, ')}p`
-
-        if (debug) {
-          logDebug(availableResolutionsString)
-        }
-
-        if (!autoselectQuality && !availableResolutions.includes(resolution)) {
-          info(`Could not find resolution (${qualityResolution}p) specified, not falling back`)
-          info(availableResolutionsString)
-          return
-        }
-
-        if (!availableResolutions.includes(resolution)) {
-          for (let i = availableResolutions.length - 1; i >= 0; i--) {
-            // get the highest resolution that is possible, next to the desired
-            if (availableResolutions[i] < resolution) {
-              resolution = availableResolutions[i]
-              break
-            }
+      if (!availableResolutions.includes(resolution)) {
+        for (let i = availableResolutions.length - 1; i >= 0; i--) {
+          // get the highest resolution that is possible, next to the desired
+          if (availableResolutions[i] < resolution) {
+            resolution = availableResolutions[i]
+            break
           }
         }
+      }
 
-        if (!availableResolutions.includes(resolution)) {
-          error('Could not find any resolution?!')
-          return
-        }
+      if (!availableResolutions.includes(resolution)) {
+        error('Could not find any resolution?!')
+        return
+      }
 
-        if (qualityResolution !== resolution && quality !== 'auto') info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
-        
-        let output = argv.output
-          .replace(':series', episodeData.series_name)
-          .replace(':name', episodeData.collection_name)
-          .replace(':epname', episodeData.name)
-          .replace(':ep', episodeData.episode_number || `(${episodeData.name})`)
-          .replace(':resolution', `${resolution}p`)
-        output = `${sanitize(output)}.mp4`
-        info(`Downloading episode as "${output}"`)
-        
-        for (let playlist of m3u8Data.playlists) {
-          if (playlist['attributes']['RESOLUTION']['height'] === resolution) {
-            if (debug) {
-              logDebug(`Downloading stream from: ${playlist['uri']}`)
+      if (qualityResolution !== resolution && quality !== 'auto') info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
+      
+      let output = argv.output
+        .replace(':series', episodeData.series_name)
+        .replace(':name', episodeData.collection_name)
+        .replace(':epname', episodeData.name)
+        .replace(':ep', episodeData.episode_number || `(${episodeData.name})`)
+        .replace(':resolution', `${resolution}p`)
+        .replace(':subType', `${subType.charAt(0).toLocaleUpperCase() + subType.slice(1)}`) // capitalize first letter
+
+      output = `${sanitize(output)}.mp4`
+      info(`Downloading episode as "${output}"`)
+      
+      for (let playlist of m3u8Data.playlists) {
+        if (playlist['attributes']['RESOLUTION']['height'] === resolution) {
+          if (debug) {
+            logDebug(`Downloading stream from: ${playlist['uri']}`)
+          }
+
+          if (subType === 'soft' && language !== 'none') {
+            const tmpOutputDir = path.join(tmpDir, `media-${episodeData.media_id}`)
+
+            // make the folder to download to
+            mkdirp.sync(tmpOutputDir)
+
+            const tmpOutput = path.join(tmpOutputDir, output)
+
+            await downloadEpisode(playlist['uri'], tmpOutput, false)
+            if (muxSubs && subtitles && subtitles.length) {
+              info('Muxing...')
+              await mux(subtitles, tmpOutput, output, debug)
+            } else {
+              info('Skipping mux...')
             }
+            info(`Successfully downloaded "${output}"`)
+          } else {
             await downloadEpisode(playlist['uri'], output)
-            return
           }
+
+          return
         }
-        warn('The resolution specified was not found')
-      } else {
-        warn('No streams found')
       }
+      warn('The resolution specified was not found')
+    } else {
+      warn('No streams found')
     }
   }
 
@@ -409,7 +569,7 @@ const main = async () => {
     const seriesId = page.match(idDivRegex)[1]
     if (!seriesId) {
       error('Series not found')
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     // grab the collections for the show
@@ -427,7 +587,7 @@ const main = async () => {
       if (!authed) {
         error('This series may also be for mature audiences! Try logging in with an account with mature content enabled.')
       }
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     let filteredCollections = collections
@@ -483,7 +643,7 @@ const main = async () => {
 
     if (list) {
       tree(collectionData)
-      process.exit(1)
+      await(cleanup(true, true, true, 0))
     }
 
     // conditionally cast if a number
@@ -508,11 +668,11 @@ const main = async () => {
             for (let i = min; i <= max; i++) acc.push(i)
           } else {
             error('Minimum value for episode range must be greater than the max!')
-            process.exit(1)
+            cleanup(true, true, true, 1)
           }
         } else {
           error('Episode range must be only numbers!')
-          process.exit(1)
+          cleanup(true, true, true, 1)
         }
       }
       return acc
@@ -528,7 +688,7 @@ const main = async () => {
     if (!allDesiredEpisodesAvailable) {
       error(`Could not find the following episodes from the collections requested: ${episodeDiff.join(', ')}`)
       info(`Available episodes: ${episodeNumbers.join(', ')}`)
-      process.exit(1)
+      await cleanup(true, true, true, 1)
     }
 
     for (let { name, data } of collectionData) {
@@ -548,7 +708,7 @@ const main = async () => {
   await cleanup()
 }
 
-const cleanup = async (logout = true, exit = true, log = true) => {
+const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => {
   if (authed && logout) {
     if (log) {
       info('Logging out...')
@@ -564,15 +724,15 @@ const cleanup = async (logout = true, exit = true, log = true) => {
     })
     authed = false
   }
+  if (subType === 'soft' && !noCleanup) {
+    rimraf.sync(tmpDir)
+  }
   if (exit) {
-    process.exit(1)
+    process.exit(exitCode)
   }
 }
 
 process.on('SIGINT', async () => {
-  await cleanup()
-})
-process.on('exit', async () => {
   await cleanup()
 })
 
@@ -584,7 +744,7 @@ const crunchyrollRequest = async (method, ...args) => {
       logDebug(`Error: ${e.response}`)
     }
     error('Something went wrong when contacting Crunchyroll. They may be down.')
-    process.exit(1)
+    await cleanup(true, true, true, 1)
   }
 }
 
@@ -596,21 +756,21 @@ const parsem3u8 = (manifest) => {
   return parser.manifest
 }
 
-const downloadEpisode = (url, output) => {
+const downloadEpisode = (url, output, logDownload = true) => {
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
         info('Beginning download...')
       })
       .on('progress', function(progress) {
-        bar((progress.percent || 0).toFixed(2), progress.currentFps, progress.timemark)
+        bar((progress.percent || 0).toFixed(2), progress.currentFps, progress.timemark, 'Downloading')
       })
       .on('error', error => {
         reject(new Error(error))
       })
       .on('end', () => {
         process.stderr.write('\n') // newline
-        info(`Successfully downloaded "${output}"`)
+        if (logDownload) info(`Successfully downloaded "${output}"`)
         resolve()
       })
       .outputOptions('-c copy')
