@@ -1,3 +1,14 @@
+## 2.0.0
+- Soft sub support
+  - The downloader now supports the download of soft-subbed videos or hard-subbed videos
+    - Use `-s soft` while downloading to specify you want soft-subbed videos
+    - The videos will begin downloading in a tmp folder. This will be automatically deleted after the download is completed.
+      - `--noCleanup` can be specified to not clean this folder up.
+      - `--mux` can be specified to not mux the files together after download. This will enable `--noCleanup` as well.
+    - Multiple languages can be specified in the `--language` parameter if using soft subtitles, separated with commas
+    - See README.md for examples using these new options
+- Fix a bug where the downloader can no longer authenticate with Crunchyroll
+
 ## 1.3.6
 - Avert compilation error with the dependencies
 

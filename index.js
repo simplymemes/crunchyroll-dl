@@ -64,10 +64,6 @@ let argv = yargs
   .describe('language', `The language of the episode subtitles. Separated by commas if soft.\n Available: ${languages.join(', ')}, none, all`)
   .default('language', 'enUS')
   .alias('l', 'language')
-
-  .describe('mux', 'If using soft subtitles, add them to the video. If disabled, the subs will not be added to the video and will not be cleaned up.')
-  .boolean('mux')
-  .default('mux', true)
   
   .describe('subType', 'The type of subs to download')
   .choices('subType', ['hard', 'soft'])
@@ -83,6 +79,14 @@ let argv = yargs
 
   .describe('tmpDir', 'Temporary file directory')
   .default('tmpDir', `tmp-${Date.now()}/`) // make the directory name unique as to when it was run
+
+  .describe('noCleanup', 'If enabled, the temporary folder with the subtitles and videos will not be cleaned up.')
+  .boolean('noCleanup')
+  .default('noCleanup', false)
+
+  .describe('mux', 'If using soft subtitles, add them to the video. If disabled, the subs will not be added to the video and will not be cleaned up.')
+  .boolean('mux')
+  .default('mux', true)
 
   // output
   .describe('output', 'The output of the file for the video file')
@@ -111,7 +115,8 @@ let authed = false
 let premium = false
 
 const { input, username, password, quality, unblocked, debug, list, tmpDir, vilos, subsOnly } = argv
-let subType = argv.subType
+let { subType, noCleanup } = argv
+
 const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
@@ -141,6 +146,14 @@ if (language === 'none') {
   if (subType === 'hard') {
     subType = 'soft'
   }
+}
+
+if (subsOnly) {
+  noCleanup = true
+}
+
+if (!muxSubs) {
+  noCleanup = true
 }
 
 // instance for further crunchyroll requests
@@ -711,7 +724,7 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
     })
     authed = false
   }
-  if (subType === 'soft' && muxSubs && !subsOnly) {
+  if (subType === 'soft' && !noCleanup) {
     rimraf.sync(tmpDir)
   }
   if (exit) {
