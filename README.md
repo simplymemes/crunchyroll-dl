@@ -25,6 +25,7 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
 ### Requirements
 - [node.js](https://nodejs.org) 8+
 - [ffmpeg](https://www.ffmpeg.org/)
+- [mkvmerge](https://mkvtoolnix.download/downloads.html) (optional: if you want to use soft subtitles)
 
 ### Installation
 `npm install -g crunchyroll-dl`
