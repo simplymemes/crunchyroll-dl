@@ -761,8 +761,6 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
-  //ffmpegArgs = ffmpegArgs[0]
-  console.log(ffmpegArgs) //TEMP
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
