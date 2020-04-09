@@ -55,6 +55,10 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
     - `:ep` the episode number
     - `:series` the series name
 ` `--vilos` fetch the videos/subtitles from the Crunchyroll web page. will not work with the unblocked option.
+- `--ffmpeg`, `-f` specify custom FFMPEG arguments (default: `-c copy`)
+  - examples
+    - `-f="-c copy" -f="-crf 24" -ffmpeg="-vcodec libx264"`
+    - `-f="-vf scale=-1:720"`
 
 **Downloading with Softsubs**
 - `--language` (same as above) which subtitle languages to download. if omitted, will present a list to select from. same options as below for the languages
