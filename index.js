@@ -98,7 +98,13 @@ let argv = yargs
 
   .describe('debug', 'Prints debug information to the log')
   .boolean('debug')
-
+    
+  .describe('ffmpeg', 'Use different arguments for FFMPEG (ex. -f="-c copy" -f="-crf 24" -f="-vcodec libx265" ...)')
+  .alias('f', 'ffmpeg')
+  .default('ffmpeg', '-c copy')
+    
+    .describe("overwrite", "Overwrite existing files")
+    .boolean("overwrite")
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -122,6 +128,8 @@ const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
 const language = argv.language
+const ffmpegArgs = argv['ffmpeg']
+const overwrite = argv['overwrite']
 let desiredLanguages = language.split(',').map(l => l.trim())
 
 if (language !== 'all' && language !== 'none') {
@@ -757,6 +765,11 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
+  if(fs.existsSync(output) && !overwrite)
+    return new Promise((resolve) => {
+      info("File already exists, skipping...");
+      resolve()
+    })
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
@@ -773,7 +786,7 @@ const downloadEpisode = (url, output, logDownload = true) => {
         if (logDownload) info(`Successfully downloaded "${output}"`)
         resolve()
       })
-      .outputOptions('-c copy')
+      .outputOptions(ffmpegArgs)
       .output(output)
       .run()
   })
