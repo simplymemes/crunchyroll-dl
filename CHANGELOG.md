@@ -1,3 +1,7 @@
+## 2.0.1
+- ffmpeg argument support
+  - see README for more info
+
 ## 2.0.0
 - Soft sub support
   - The downloader now supports the download of soft-subbed videos or hard-subbed videos

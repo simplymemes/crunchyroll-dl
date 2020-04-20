@@ -211,13 +211,19 @@ const main = async () => {
         }
       })
 
-      if (unblockedSessionData) {
+      if (unblockedSessionData && unblockedSessionData.session_id) {
         sessionId = unblockedSessionData.session_id
         info('Successfully initiated USA Crunchyroll session')
+      } else if (unblockedSessionData.error) {
+        if (debug) {
+          logDebug(`Unblocker response: ${JSON.stringify(unblockedSessionData)}`)
+        }
+        error('Could not start unblocked session!')
+        await cleanup(true, true, true, 1)
       }
     } catch (e) {
       if (debug) {
-        logDebug(`Error: ${e.response}`)
+        logDebug(`Error: ${e}`)
       }
       error('Something went wrong when creating an unblocked session.')
       await cleanup(true, true, true, 1)
@@ -645,7 +651,16 @@ const main = async () => {
           ...baseParams
         }
       })
-      return { name: collectionMedia[0] && collectionMedia[0].collection_name, id, data: collectionMedia }
+
+      if (!collectionMedia) {
+        warn(`No collection found for id ${id}!`)
+      }
+
+      return { 
+        name: collectionMedia && collectionMedia[0] && collectionMedia[0].collection_name || 'name_not_found',
+        id,
+        data: collectionMedia
+      }
     })
     const collectionData = await Promise.all(collectionDataPromises)
 
