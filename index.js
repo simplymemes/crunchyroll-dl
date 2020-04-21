@@ -290,7 +290,12 @@ const main = async () => {
       }))
     }
 
-    if (episodeData.premium_only && !premium) {
+    if (!episodeData) {
+      error('Could not get episode!')
+      return
+    }
+
+    if (episodeData && episodeData.premium_only && !premium) {
       warn(`Skipping "${episodeData.name}" due to it being for premium members only. (Ep ${episodeData.episode_number})`)
       return
     }
