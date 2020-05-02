@@ -22,6 +22,7 @@
     "langs": "^2.0.0",
     "m3u8-parser": "^4.4.0",
     "mkdirp": "^0.5.1",
+    "node-notifier": "^7.0.0",
     "prompts": "^2.3.2",
     "request": "^2.88.2",
     "rimraf": "^3.0.2",
