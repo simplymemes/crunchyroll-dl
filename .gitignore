@@ -3,3 +3,4 @@ node_modules
 *.mkv
 *.mp4
 *.ass
+.idea
