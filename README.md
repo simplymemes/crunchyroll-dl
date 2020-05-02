@@ -59,6 +59,12 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
   - examples
     - `-f="-c copy" -f="-crf 24" -ffmpeg="-vcodec libx264"`
     - `-f="-vf scale=-1:720"`
+- `--notificationLevel`, `-n` specify level of notifications.  Notifications are displayed using the operating systems' notification manager (default: `0`)
+  - levels
+    - 0: show all notifications
+    - 1: premium only warnings or errors
+    - 2: errors only
+    - 3: no notifications
 - `--overwrite` force overwrite existing files.
 
 **Downloading with Softsubs**
