@@ -14,6 +14,9 @@ const ffmpeg = require('fluent-ffmpeg')
 const m3u8Parser = require('m3u8-parser')
 const mkdirp = require('mkdirp')
 const rimraf = require('rimraf')
+const notifier = require('node-notifier')
+
+let notificationLevelStatus = -1
 
 const { oneLineTrim } = require('common-tags')
 
@@ -98,13 +101,18 @@ let argv = yargs
 
   .describe('debug', 'Prints debug information to the log')
   .boolean('debug')
-    
+
   .describe('ffmpeg', 'Use different arguments for FFMPEG (ex. -f="-c copy" -f="-crf 24" -f="-vcodec libx265" ...)')
   .alias('f', 'ffmpeg')
   .default('ffmpeg', '-c copy')
-    
-    .describe("overwrite", "Overwrite existing files")
-    .boolean("overwrite")
+
+  .describe("overwrite", "Overwrite existing files")
+  .boolean("overwrite")
+
+  .describe("notificationLevel", "Set the minimum level of notifications (0: all, 1: warnings, 2: errors, 3: disable notifications)")
+  .alias("n", "notificationLevel")
+  .default("notificationLevel", "0")
+
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -119,6 +127,7 @@ let sessionId = null
 let expires = new Date()
 let authed = false
 let premium = false
+let seriesName
 
 const { input, username, password, quality, unblocked, debug, list, tmpDir, vilos, subsOnly } = argv
 let { subType, noCleanup } = argv
@@ -130,6 +139,7 @@ const episodeRanges = argv['episodes'].toString()
 const language = argv.language
 const ffmpegArgs = argv['ffmpeg']
 const overwrite = argv['overwrite']
+const notificationLevel = argv['notificationLevel']
 let desiredLanguages = language.split(',').map(l => l.trim())
 
 if (language !== 'all' && language !== 'none') {
@@ -177,7 +187,10 @@ const baseParams = {
 
 const main = async () => {
   info(`crunchyroll-dl v${version}`)
-
+  
+  if(notificationLevel > 3 || notificationLevel < 0)
+    warn("Notification level should be between or equal to 0 through 3")
+  
   // adapted from https://github.com/Xonshiz/anime-dl/blob/master/anime_dl/sites/crunchyroll.py#L50-L51
   const seriesRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.com(\/[a-z]{2}|\/[a-z]{2}-[a-z]{2})?\/([\w\-]+))\/?(?:\?|$)/
   const episodeRegex = /https?:\/\/(?:(www|m)\.)?(crunchyroll\.(?:com|fr)(\/[a-z]{2}|\/[a-z]{2}-[a-z]{2})?\/(?:media(?:-|\/\?id=)|[^/]*\/[^/?&]*?)([0-9]+))(?:[/?&]|$)/
@@ -186,16 +199,19 @@ const main = async () => {
   let episode = episodeRegex.test(input)
   if (!series && !episode) {
     error('Invalid Crunchyroll URL input')
+    notificationLevelStatus = 2
     await cleanup(true, true, true, 1)
   }
 
   if (list && !series) {
     error('You can only list the episodes and collections from a series!')
+    notificationLevelStatus = 2
     await cleanup(true, true, true, 1)
   }
 
   if (vilos && unblocked) {
     error('You cannot use the vilos option and be unblocked at the same time!')
+    notificationLevelStatus = 2
     await cleanup(true, true, true, 1)
   }
 
@@ -297,6 +313,7 @@ const main = async () => {
 
     if (episodeData && episodeData.premium_only && !premium) {
       warn(`Skipping "${episodeData.name}" due to it being for premium members only. (Ep ${episodeData.episode_number})`)
+      notificationLevelStatus = 1
       return
     }
 
@@ -489,6 +506,8 @@ const main = async () => {
 
       if (qualityResolution !== resolution && quality !== 'auto') info(`Downloading in ${resolution}p, as ${qualityResolution}p was not available.`)
       
+      seriesName = episodeData.series_name
+      
       let output = argv.output
         .replace(':series', episodeData.series_name)
         .replace(':name', episodeData.collection_name)
@@ -581,6 +600,7 @@ const main = async () => {
       if (e.errorType === 1) {
         error('Cannot solve CAPTCHA automatically! Please try again later.')
       }
+      notificationLevelStatus = 2
       await cleanup()
     }
     const idDivRegex = /<div class="show-actions" group_id="(.*)"><\/div>/ // search for a div with an id
@@ -733,6 +753,9 @@ const main = async () => {
   }
 
   info('Done!')
+  
+  if(notificationLevelStatus === -1) notificationLevelStatus = 0
+  
   await cleanup()
 }
 
@@ -756,11 +779,54 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
     rimraf.sync(tmpDir)
   }
   if (exit) {
+    //send a desktop notification to the user
+    let notificationMessage
+    
+    //set the level in case it wasn't set
+    if(notificationLevelStatus === -1 && exitCode !== 0)
+      notificationLevelStatus = 2
+
+    let showNotifications = notificationLevel <= notificationLevelStatus
+    
+    if(notificationLevelStatus === -2)
+        showNotifications = false
+    
+    //-2: terminated (do not show notifications)
+    //-1: unset (should not happen)
+    //0 : perfect (everything worked as expected)
+    //1 : some episodes may be premium only (if user does not have premium)
+    //2 : there was an error downloading (exit code is 1)
+    switch(notificationLevelStatus) {
+      case 0:
+        notificationMessage = "Finished downloading " + seriesName + "."
+        break
+      case 1:
+        notificationMessage = seriesName !== undefined ?
+            "Downloaded " + seriesName + ", one or more episode(s) could not be downloaded due to it only being available for premium members." :
+            "Process finished, but one or more episode(s) could not be downloaded due to it only being available for premium members."
+        break
+      case 2:
+        notificationMessage = seriesName !== undefined ?
+            "Could not download " + seriesName + "." :
+            "Could not download the series."
+    }
+    if(showNotifications) {
+      notifier.notify(
+          {
+            title: 'crunchyroll-dl',
+            message: notificationMessage,
+            sound: true,
+            wait: false
+          }
+      )
+    }
+    
     process.exit(exitCode)
   }
 }
 
 process.on('SIGINT', async () => {
+  notificationLevelStatus = -2 //don't send notifications if the program is terminated
   await cleanup()
 })
 
