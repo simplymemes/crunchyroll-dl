@@ -817,9 +817,24 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
             title: 'crunchyroll-dl',
             message: notificationMessage,
             sound: true,
-            wait: false
-          }
-      )
+            wait: true
+          })
+      //possible requirements for windows 10 notifications
+      const WinNotify = require('node-notifier').WindowsBalloon
+      const winNotifyO = new WinNotify({
+        withFallback: false,
+        customPath: undefined
+      })
+      
+      winNotifyO.notify({
+        appName: "crunchyroll-dl",
+        title: 'crunchyroll-dl',
+        message: notificationMessage,
+        sound: true,
+        wait: true,
+        time: 5000,
+        type: 'info'
+      })
     }
     
     process.exit(exitCode)
