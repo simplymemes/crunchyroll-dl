@@ -813,6 +813,7 @@ const cleanup = async (logout = true, exit = true, log = true, exitCode = 0) => 
     if(showNotifications) {
       notifier.notify(
           {
+            appName: "crunchyroll-dl",
             title: 'crunchyroll-dl',
             message: notificationMessage,
             sound: true,
