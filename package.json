@@ -5,7 +5,9 @@
   "main": "index.js",
   "author": "simplymemes",
   "license": "MIT",
-  "appId": "crunchyroll-dl",
+  "build": {
+    "appId": "crunchyroll-dl"
+  },
   "scripts": {
     "run-npm-publish": "npm publish",
     "run-npm-publish-beta": "npm publish --tag beta"
