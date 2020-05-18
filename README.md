@@ -60,6 +60,8 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
     - `-f="-c copy" -f="-crf 24" -ffmpeg="-vcodec libx264"`
     - `-f="-vf scale=-1:720"`
 - `--overwrite` force overwrite existing files.
+- `--folderBySeason` use a specific folder for each season.
+- `--moveExists` move existing files to their season folder.
 
 **Downloading with Softsubs**
 - `--language` (same as above) which subtitle languages to download. if omitted, will present a list to select from. same options as below for the languages

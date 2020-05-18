@@ -109,6 +109,9 @@ let argv = yargs
   .describe("folderBySeason", "Put episodes into folders by their seasons")
   .boolean("folderBySeason")
     
+  .describe("moveExists", "Move existing files to their season folder (used for merging with folderBySeason) (REQUIRES folderBySeason to be on)")
+  .boolean("moveExists")
+    
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -135,6 +138,7 @@ const language = argv.language
 const ffmpegArgs = argv['ffmpeg']
 const overwrite = argv['overwrite']
 const folderBySeason = argv["folderBySeason"]
+let moveExists = argv['moveExists']
 let seasonName = "null";
 let desiredLanguages = language.split(',').map(l => l.trim())
 
@@ -146,6 +150,11 @@ if (language !== 'all' && language !== 'none') {
       process.exit(1)
     }
   }
+}
+
+if(moveExists && !folderBySeason) {
+  warn("moveExists has been disabled because folderBySeason is disabled.")
+  moveExists = false;
 }
 
 if (subsOnly && subType !== 'soft') {
@@ -792,10 +801,19 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
+  
   if(folderBySeason) {
     const fs = require("fs");
     if(!fs.existsSync(seasonName))
       fs.mkdirSync(seasonName)
+    if(fs.existsSync(output) && moveExists)
+      return new Promise((resolve) => {
+        info("Moving " + output + " to " + seasonName + "/" + output);
+        fs.rename(output, "./" + seasonName + "/" + output, foo => {
+          
+        })
+        resolve()
+      })
     output = "./" + seasonName + "/" + output;
   }
   if(fs.existsSync(output) && !overwrite)
