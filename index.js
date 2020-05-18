@@ -792,20 +792,19 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
-  console.log(output) //TEMP
+  if(folderBySeason) {
+    const fs = require("fs");
+    if(!fs.existsSync(seasonName))
+      fs.mkdirSync(seasonName)
+    output = "./" + seasonName + "/" + output;
+  }
   if(fs.existsSync(output) && !overwrite)
     return new Promise((resolve) => {
       info("File already exists, skipping...");
       resolve()
     })
   return new Promise((resolve, reject) => {
-    if(folderBySeason) {
-      const fs = require("fs");
-      if(!fs.existsSync(seasonName))
-        fs.mkdirSync(seasonName)
-      process.chdir("./" + seasonName)
-      output = "./" + seasonName + "/" + output;
-    }
+    
     ffmpeg(url)
       .on('start', () => {
         info('Beginning download...')
@@ -824,8 +823,6 @@ const downloadEpisode = (url, output, logDownload = true) => {
       .outputOptions(ffmpegArgs)
       .output(output)
       .run()
-    if(folderBySeason)
-      process.chdir("..")
   })
 }
 
