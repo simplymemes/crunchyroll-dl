@@ -103,8 +103,12 @@ let argv = yargs
   .alias('f', 'ffmpeg')
   .default('ffmpeg', '-c copy')
     
-    .describe("overwrite", "Overwrite existing files")
-    .boolean("overwrite")
+  .describe("overwrite", "Overwrite existing files")
+  .boolean("overwrite")
+  
+  .describe("folderBySeason", "Put episodes into folders by their seasons")
+  .boolean("folderBySeason")
+    
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -130,6 +134,8 @@ const episodeRanges = argv['episodes'].toString()
 const language = argv.language
 const ffmpegArgs = argv['ffmpeg']
 const overwrite = argv['overwrite']
+const folderBySeason = argv["folderBySeason"]
+let seasonName = "null";
 let desiredLanguages = language.split(',').map(l => l.trim())
 
 if (language !== 'all' && language !== 'none') {
@@ -727,6 +733,7 @@ const main = async () => {
           continue
         }
         info(`Downloading episode ${media.episode_number || '(not set)'}, "${media.name}", of "${name}"`)
+        seasonName = name;
         await getEpisode(media.media_id, media)
       }
     }
@@ -785,12 +792,20 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
+  console.log(output) //TEMP
   if(fs.existsSync(output) && !overwrite)
     return new Promise((resolve) => {
       info("File already exists, skipping...");
       resolve()
     })
   return new Promise((resolve, reject) => {
+    if(folderBySeason) {
+      const fs = require("fs");
+      if(!fs.existsSync(seasonName))
+        fs.mkdirSync(seasonName)
+      process.chdir("./" + seasonName)
+      output = "./" + seasonName + "/" + output;
+    }
     ffmpeg(url)
       .on('start', () => {
         info('Beginning download...')
@@ -809,6 +824,8 @@ const downloadEpisode = (url, output, logDownload = true) => {
       .outputOptions(ffmpegArgs)
       .output(output)
       .run()
+    if(folderBySeason)
+      process.chdir("..")
   })
 }
 
