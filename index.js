@@ -809,9 +809,7 @@ const downloadEpisode = (url, output, logDownload = true) => {
     if(fs.existsSync(output) && moveExists)
       return new Promise((resolve) => {
         info("Moving " + output + " to " + seasonName + "/" + output);
-        fs.rename(output, "./" + seasonName + "/" + output, foo => {
-          
-        })
+        fs.rename(output, "./" + seasonName + "/" + output, () => {})
         resolve()
       })
     output = "./" + seasonName + "/" + output;
