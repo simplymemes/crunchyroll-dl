@@ -57,7 +57,7 @@ Downloads the Crunchyroll videos with the subtitles hardsubbed or softsubbed.
 - `--vilos` fetch the videos/subtitles from the Crunchyroll web page. will not work with the unblocked option.
 - `--ffmpeg`, `-f` specify custom FFMPEG arguments (default: `-c copy`)
   - examples
-    - `-f="-c copy" -f="-crf 24" -ffmpeg="-vcodec libx264"`
+    - `-f="-c copy" -f="-crf 24" --ffmpeg="-vcodec libx264"`
     - `-f="-vf scale=-1:720"`
 - `--overwrite` force overwrite existing files.
 - `--folderBySeason` use a specific folder for each season.
