@@ -103,8 +103,15 @@ let argv = yargs
   .alias('f', 'ffmpeg')
   .default('ffmpeg', '-c copy')
     
-    .describe("overwrite", "Overwrite existing files")
-    .boolean("overwrite")
+  .describe("overwrite", "Overwrite existing files")
+  .boolean("overwrite")
+  
+  .describe("folderBySeason", "Put episodes into folders by their seasons")
+  .boolean("folderBySeason")
+    
+  .describe("moveExists", "Move existing files to their season folder (used for merging with folderBySeason) (REQUIRES folderBySeason to be on)")
+  .boolean("moveExists")
+    
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
@@ -130,6 +137,9 @@ const episodeRanges = argv['episodes'].toString()
 const language = argv.language
 const ffmpegArgs = argv['ffmpeg']
 const overwrite = argv['overwrite']
+const folderBySeason = argv["folderBySeason"]
+let moveExists = argv['moveExists']
+let seasonName = "null";
 let desiredLanguages = language.split(',').map(l => l.trim())
 
 if (language !== 'all' && language !== 'none') {
@@ -140,6 +150,11 @@ if (language !== 'all' && language !== 'none') {
       process.exit(1)
     }
   }
+}
+
+if(moveExists && !folderBySeason) {
+  warn("moveExists has been disabled because folderBySeason is disabled.")
+  moveExists = false;
 }
 
 if (subsOnly && subType !== 'soft') {
@@ -727,6 +742,7 @@ const main = async () => {
           continue
         }
         info(`Downloading episode ${media.episode_number || '(not set)'}, "${media.name}", of "${name}"`)
+        seasonName = name;
         await getEpisode(media.media_id, media)
       }
     }
@@ -785,12 +801,26 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
+  
+  if(folderBySeason) {
+    const fs = require("fs");
+    if(!fs.existsSync(seasonName))
+      fs.mkdirSync(seasonName)
+    if(fs.existsSync(output) && moveExists)
+      return new Promise((resolve) => {
+        info("Moving " + output + " to " + seasonName + "/" + output);
+        fs.rename(output, "./" + seasonName + "/" + output, () => {})
+        resolve()
+      })
+    output = "./" + seasonName + "/" + output;
+  }
   if(fs.existsSync(output) && !overwrite)
     return new Promise((resolve) => {
       info("File already exists, skipping...");
       resolve()
     })
   return new Promise((resolve, reject) => {
+    
     ffmpeg(url)
       .on('start', () => {
         info('Beginning download...')
