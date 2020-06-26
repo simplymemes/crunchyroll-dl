@@ -581,7 +581,7 @@ const main = async () => {
       if (e.errorType === 1) {
         error('Cannot solve CAPTCHA automatically! Please try again later.')
       }
-      await cleanup()
+      await cleanup(false, true, true, 5)
     }
     const idDivRegex = /<div class="show-actions" group_id="(.*)"><\/div>/ // search for a div with an id
 
