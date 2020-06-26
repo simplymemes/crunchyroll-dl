@@ -8,6 +8,7 @@ const axios = require('axios')
 const uuid = require('uuid')
 const FormData = require('form-data')
 const cloudscraper = require('cloudscraper')
+const youtubedl = require('youtube-dl')
 
 const sanitize = require('sanitize-filename')
 const ffmpeg = require('fluent-ffmpeg')
@@ -361,8 +362,18 @@ const main = async () => {
   
         mediaHandler = await getMedia(xmlData)
         streams = [{ url: mediaHandler.getStream().getFile() }]
-        subtitles = mediaHandler.getSubtitles()
-
+        //subtitles = mediaHandler.getSubtitles()
+        
+        const ytdlSubsArgs = {
+          auto: false,
+          all: false,
+          format: 'ass',
+          lang: language,
+          cwd: tmpDir || './tmp/'
+        }
+        
+        let subtitles = youtubedl.getSubs("")
+        
         let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
 
         choices = subtitleContent.map((sub) => ({ title: sub.title, value: sub, locale: sub.locale.replace('-', '') }))
