@@ -787,7 +787,7 @@ const parsem3u8 = (manifest) => {
 const downloadEpisode = (url, output, logDownload = true) => {
   if(fs.existsSync(output) && !overwrite)
     return new Promise((resolve) => {
-      info("File already exists, skipping...");
+      info("File already exists, skipping...")
       resolve()
     })
   return new Promise((resolve, reject) => {
