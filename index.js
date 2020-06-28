@@ -215,7 +215,7 @@ const main = async () => {
   // start session, either unblocked or blocked
   if (unblocked) {
     try {
-      const { data: { data: unblockedSessionData } } = await axios.get('https://api2.cr-unblocker.com/start_session', {
+      const { data: { data: unblockedSessionData } } = await axios.get('https://cr-unblocker.us.to/start_session', {
         params: {
           device_id: uuid(),
           version: '1.1'
