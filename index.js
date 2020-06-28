@@ -176,6 +176,16 @@ const baseParams = {
   version: '2.6.0'
 }
 
+//check if a given file exists.
+//return true if it does, false otherwise.
+function checkExists(output) {
+  if(fs.existsSync(output) && !overwrite) {
+    info("File already exists, skipping...")
+    return true
+  }
+  return false
+}
+
 const main = async () => {
   info(`crunchyroll-dl v${version}`)
 
@@ -362,17 +372,8 @@ const main = async () => {
   
         mediaHandler = await getMedia(xmlData)
         streams = [{ url: mediaHandler.getStream().getFile() }]
-        //subtitles = mediaHandler.getSubtitles()
+        subtitles = mediaHandler.getSubtitles()
         
-        const ytdlSubsArgs = {
-          auto: false,
-          all: false,
-          format: 'ass',
-          lang: language,
-          cwd: tmpDir || './tmp/'
-        }
-        
-        let subtitles = youtubedl.getSubs("")
         
         let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
 
@@ -516,8 +517,10 @@ const main = async () => {
           if (debug) {
             logDebug(`Downloading stream from: ${playlist['uri']}`)
           }
-
+          
           if (subType === 'soft' && language !== 'none') {
+            if(checkExists(output))
+              continue
             const tmpOutputDir = path.join(tmpDir, `media-${episodeData.media_id}`)
 
             // make the folder to download to
@@ -796,11 +799,7 @@ const parsem3u8 = (manifest) => {
 }
 
 const downloadEpisode = (url, output, logDownload = true) => {
-  if(fs.existsSync(output) && !overwrite)
-    return new Promise((resolve) => {
-      info("File already exists, skipping...")
-      resolve()
-    })
+  checkExists();
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
