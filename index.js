@@ -243,7 +243,7 @@ const main = async () => {
     const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
       params: {
         access_token: 'WveH9VkPLrXvuNm',
-        device_type: 'com.crunchyroll.crunchyroid',
+        device_type: 'com.crunchyroll.windows.desktop',
         device_id: uuid(),
         ...baseParams
       }
