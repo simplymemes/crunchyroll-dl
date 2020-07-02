@@ -28,8 +28,7 @@
     "sanitize-filename": "^1.6.3",
     "treeify": "^1.1.0",
     "uuid": "^3.3.3",
-    "yargs": "^14.0.0",
-    "youtube-dl": "^3.0.2"
+    "yargs": "^14.0.0"
   },
   "bin": {
     "crunchyroll-dl": "index.js"
