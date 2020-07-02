@@ -41,7 +41,7 @@ let argv = yargs
 
   .describe('quality', 'The quality of the stream (Will choose what is specified, or the next best quality)')
   .choices('quality', ['240p', '360p', '480p', '720p', '1080p', 'auto'])
-  .default('quality', 'auto', 'Automatically choose the quality')
+  .default('quality', '1080p', 'Automatically choose the quality')
   .alias('q', 'quality')
 
   .describe('dont-autoselect-quality', 'Don\'t automatically select the quality if the specified one is not available')
@@ -103,13 +103,16 @@ let argv = yargs
   .alias('f', 'ffmpeg')
   .default('ffmpeg', '-c copy')
     
-    .describe("overwrite", "Overwrite existing files")
-    .boolean("overwrite")
+  .describe("noLang", "Do not attempt to download any languages.")
+  .boolean("noLang")
+  
+  .describe("overwrite", "Overwrite existing files")
+  .boolean("overwrite")
   // help
   .describe('h', 'Shows this help')
   .alias('h', 'help')
   .boolean('h')
-
+  
   .demandOption(['input'], 'Please specify an input')
   .help()
   .version()
@@ -127,10 +130,22 @@ const autoselectQuality = !argv['dont-autoselect-quality']
 const downloadAll = argv['download-all']
 const ignoreDubs = argv['ignore-dubs']
 const episodeRanges = argv['episodes'].toString()
-const language = argv.language
+const language = argv.language //this is enUS if none are selected for some reason...
+const noLang = argv.noLang
 const ffmpegArgs = argv['ffmpeg']
 const overwrite = argv['overwrite']
 let desiredLanguages = language.split(',').map(l => l.trim())
+
+if(noLang) {
+  if(!vilos) {
+    error("No language only works with the vilos argument (temporary).  Exiting...")
+    process.exit(8)
+  }
+  if(subType !== "soft") {
+    warn("Automatically enabled soft subs to not download any language.")
+    subType = "soft"
+  }
+}
 
 if (language !== 'all' && language !== 'none') {
   for (let language of desiredLanguages) {
@@ -175,6 +190,18 @@ const baseParams = {
   version: '2.6.0'
 }
 
+//check if a given file exists.
+//return true if it does, false otherwise.
+async function checkExists(output) {
+  if(debug)
+    await logDebug("Checking if " + output + " exists...")
+  if((await fs.existsSync(output)) && !overwrite) {
+    await info("File already exists, skipping...")
+    return true
+  }
+  return false
+}
+
 const main = async () => {
   info(`crunchyroll-dl v${version}`)
 
@@ -204,7 +231,7 @@ const main = async () => {
   // start session, either unblocked or blocked
   if (unblocked) {
     try {
-      const { data: { data: unblockedSessionData } } = await axios.get('https://api2.cr-unblocker.com/start_session', {
+      const { data: { data: unblockedSessionData } } = await axios.get('https://cr-unblocker.us.to/start_session', {
         params: {
           device_id: uuid(),
           version: '1.1'
@@ -232,7 +259,7 @@ const main = async () => {
     const { data: { data: sessionData } } = await crunchyrollRequest('get', 'start_session.0.json', {
       params: {
         access_token: 'WveH9VkPLrXvuNm',
-        device_type: 'com.crunchyroll.crunchyroid',
+        device_type: 'com.crunchyroll.crunchyroid', //com.crunchyroll.windows.desktop has problems
         device_id: uuid(),
         ...baseParams
       }
@@ -362,7 +389,8 @@ const main = async () => {
         mediaHandler = await getMedia(xmlData)
         streams = [{ url: mediaHandler.getStream().getFile() }]
         subtitles = mediaHandler.getSubtitles()
-
+        
+        
         let subtitleContent = await Promise.all(subtitles.map(async (subtitle) => await subtitle.getContent()))
 
         choices = subtitleContent.map((sub) => ({ title: sub.title, value: sub, locale: sub.locale.replace('-', '') }))
@@ -407,7 +435,7 @@ const main = async () => {
         // quickly convert into the same that prompts would return
         selectedLanguages = choices.filter((choice) => languages.includes(choice.locale)).map((choice) => choice.value)
       }
-
+      
       if (selectedLanguages.length === 0) {
         warn('No subtitles selected!')
         if (subsOnly) {
@@ -415,9 +443,11 @@ const main = async () => {
           return
         }
       } else {
-        info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
-        subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
-        info('Subtitles downloaded!')
+        if(!noLang) {
+          info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
+          subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
+          info('Subtitles downloaded!')
+        }
 
         if (subsOnly) {
           info(`Subs only download completed! Find them in the folder ./${subPath}`)
@@ -505,8 +535,10 @@ const main = async () => {
           if (debug) {
             logDebug(`Downloading stream from: ${playlist['uri']}`)
           }
-
-          if (subType === 'soft' && language !== 'none') {
+          
+          if (subType === 'soft' && !noLang) {
+            if(await checkExists(output))
+              continue
             const tmpOutputDir = path.join(tmpDir, `media-${episodeData.media_id}`)
 
             // make the folder to download to
@@ -544,7 +576,8 @@ const main = async () => {
 
   if (series) {
     info('Attempting to fetch series...')
-
+    /*FIXME fix this.  This should be fixable by getting the individual episode
+    *  URL rather than the current method.*/
     const cloudflareBypass = (uri) => {
       return new Promise((resolve, reject) => {
         cloudscraper.get({ uri }, (err, res) => {
@@ -581,7 +614,7 @@ const main = async () => {
       if (e.errorType === 1) {
         error('Cannot solve CAPTCHA automatically! Please try again later.')
       }
-      await cleanup()
+      await cleanup(false, true, true, 5)
     }
     const idDivRegex = /<div class="show-actions" group_id="(.*)"><\/div>/ // search for a div with an id
 
@@ -784,12 +817,9 @@ const parsem3u8 = (manifest) => {
   return parser.manifest
 }
 
-const downloadEpisode = (url, output, logDownload = true) => {
-  if(fs.existsSync(output) && !overwrite)
-    return new Promise((resolve) => {
-      info("File already exists, skipping...");
-      resolve()
-    })
+const downloadEpisode = async (url, output, logDownload = true) => {
+  if(await checkExists(output))
+    return
   return new Promise((resolve, reject) => {
     ffmpeg(url)
       .on('start', () => {
