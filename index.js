@@ -443,7 +443,7 @@ const main = async () => {
           return
         }
       } else {
-        if(language !== "none" && !noLang) {
+        if(!noLang) {
           info(`Downloading subtitle languages: ${selectedLanguages.map(sub => sub.title).join(', ')}`)
           subtitles = await downloadSubs(subPath, selectedLanguages, vilos)
           info('Subtitles downloaded!')
